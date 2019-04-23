@@ -617,13 +617,16 @@ func EvalExpr(expr expression.Expr, getDarc GetDarc, ids ...string) error {
 // identities. It takes 'acceptDarc', and, if it is true, doesn't recurse into
 // darcs that fit one of the ids.
 func EvalExprDarc(expr expression.Expr, getDarc GetDarc, acceptDarc bool, ids ...string) error {
+
 	Y := expression.InitParser(func(s string) bool {
 		found := false
+
 		for _, id := range ids {
 			if id == s {
 				found = true
 			}
 		}
+
 		if strings.HasPrefix(s, "darc") {
 			if acceptDarc && found {
 				return true

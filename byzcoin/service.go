@@ -311,13 +311,13 @@ func (s *Service) AddTransaction(req *AddTxRequest) (*AddTxResponse, error) {
 		log.Lvlf2("Instruction[%d]: %s", i, instr.Action())
 	}
 
-	// Note to my future self: s.txBuffer.add used to be out here. It used to work
-	// even. But while investigating other race conditions, we realized that
-	// IF there will be a wait channel, THEN it must exist before the call to add().
-	// If add() comes first, there's a race condition where the block could theoretically
-	// be created and (not) notified before the wait channel is created. Moving
-	// add() after createWaitChannel() solves this, but then we need a second add() for the
-	// no inclusion wait case.
+	// Note to my future self: s.txBuffer.add used to be out here. It used to
+	// work even. But while investigating other race conditions, we realized
+	// that IF there will be a wait channel, THEN it must exist before the call
+	// to add(). If add() comes first, there's a race condition where the block
+	// could theoretically be created and (not) notified before the wait channel
+	// is created. Moving add() after createWaitChannel() solves this, but then
+	// we need a second add() for the no inclusion wait case.
 
 	if req.InclusionWait > 0 {
 		// Wait for InclusionWait new blocks and look if our transaction is in it.
@@ -1826,7 +1826,80 @@ func (s *Service) createStateChanges(sst *stagingStateTrie, scID skipchain.SkipB
 	return
 }
 
+// This is a crappy recursive function that tracks the links of multisign
+// transaction. Returns the root instruction and fills "signerIdentities"
+func findSigners(txResults TxResults, skipBlock *skipchain.SkipBlock, instructionId []byte, signerIdentities *[]darc.Identity, s *Service) (Instruction, *skipchain.SkipBlock) {
+	var instruction Instruction
+	for _, txResult := range txResults {
+		for _, instruction = range txResult.ClientTransaction.Instructions {
+			if bytes.Equal(instruction.Hash(), instructionId) {
+				*signerIdentities = append(*signerIdentities, instruction.SignerIdentities...)
+				if instruction.Multisign == nil {
+					return instruction, skipBlock
+				} else {
+					blockId := instruction.Multisign.BlockId
+					instructionId := instruction.Multisign.InstructionId
+					txResults, skipBlock, _ := s.getBlockTx(blockId)
+					instruction, skipBlock = findSigners(txResults, skipBlock, instructionId, signerIdentities, s)
+				}
+			}
+		}
+	}
+	return instruction, skipBlock
+}
+
 func (s *Service) processOneTx(sst *stagingStateTrie, tx ClientTransaction) (StateChanges, *stagingStateTrie, error) {
+
+	if tx.Instructions[0].GetType() == MultisignType {
+		// Here we need to track back all the signers until reaching the
+		// original instruction. Then we must check if enought people signed
+		// the instruction.
+		blockId := tx.Instructions[0].Multisign.BlockId
+		instructionId := tx.Instructions[0].Multisign.InstructionId
+
+		signerIdentities := make([]darc.Identity, 1)
+
+		txResults, skipBlock, _ := s.getBlockTx(blockId)
+		rootInstruction, rootSkipBlock := findSigners(txResults, skipBlock, instructionId, &signerIdentities, s)
+
+		fmt.Printf("Here are the identities: %s\n", signerIdentities)
+		fmt.Printf("and here is the root instruction: %s\n", rootInstruction)
+
+		// So.. Should I now create a new instruction with the same command
+		// but with all the collected signers? => No because of the counters...
+		// So I have to manually check
+
+		// getDarc := func(str string, latest bool) *darc.Darc {
+		// 	if len(str) < 5 || string(str[0:5]) != "darc:" {
+		// 		return nil
+		// 	}
+		// 	darcID, err := hex.DecodeString(str[5:])
+		// 	if err != nil {
+		// 		return nil
+		// 	}
+		// 	d, err := LoadDarcFromTrie(st, darcID)
+		// 	if err != nil {
+		// 		return nil
+		// 	}
+		// 	return d
+		// }
+
+		var header DataHeader
+		err := protobuf.Decode(rootSkipBlock.Data, &header)
+		if err != nil {
+			log.Error(s.ServerIdentity(), "could not unmarshal header", err)
+		}
+		fmt.Printf("Here is the header: %x", header)
+		// ca := &CheckAuthorization{
+		// 	Version:    CurrentVersion,
+		// 	ByzCoinID:  header.,
+		// 	DarcID:     ???,
+		// 	Identities: signerIdentities,
+		// }
+		// s.CheckAuthorization(ca)
+
+	}
+
 	// Make a new trie for each instruction. If the instruction is
 	// sucessfully implemented and changes applied, then keep it
 	// otherwise dump it.
@@ -1949,6 +2022,8 @@ func (s *Service) executeInstruction(st ReadOnlyStateTrie, cin []Coin, instr Ins
 		scs, cout, err = c.Invoke(st, instr, cin)
 	case DeleteType:
 		scs, cout, err = c.Delete(st, instr, cin)
+	case MultisignType:
+		scs, cout, err = c.Multisign(st, instr, cin)
 	default:
 		return nil, nil, errors.New("unexpected contract type")
 	}

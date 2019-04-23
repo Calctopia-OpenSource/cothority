@@ -1,6 +1,6 @@
 all: test
 
-include $(shell go env GOPATH)/src/github.com/dedis/Coding/bin/Makefile.base
+include ../Coding/bin/Makefile.base
 EXCLUDE_LINT = "should be.*UI|_test.go"
 
 # You can use `test_playground` to run any test or part of cothority
@@ -27,5 +27,5 @@ docker:
 	cd external/docker/; make docker_test
 
 test_java: docker
-	cd external/java; mvn test
+	cd external/java; mvn -e -X test
 

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"go.dedis.ch/cothority/v3/byzcoin/trie"
@@ -204,6 +205,8 @@ func (instr Instruction) Action() string {
 		a = "invoke:" + instr.Invoke.ContractID + "." + instr.Invoke.Command
 	case DeleteType:
 		a = "delete:" + instr.Delete.ContractID
+	case MultisignType:
+		a = fmt.Sprintf("multisign:%x", instr.Multisign.BlockId)
 	}
 	return a
 }
@@ -285,8 +288,14 @@ func (instr Instruction) Verify(st ReadOnlyStateTrie, msg []byte) error {
 		return errors.New("no signatures - nothing to verify")
 	}
 
+	isMultisign := false
+	if strings.HasPrefix(instr.Action(), "multisign:") {
+		fmt.Printf("This is a multisign action: %x\n", instr.Multisign.BlockId)
+		isMultisign = true
+	}
+
 	// check the action
-	if !d.Rules.Contains(darc.Action(instr.Action())) {
+	if !d.Rules.Contains(darc.Action(instr.Action())) && !isMultisign {
 		return fmt.Errorf("action '%v' does not exist", instr.Action())
 	}
 
@@ -312,6 +321,11 @@ func (instr Instruction) Verify(st ReadOnlyStateTrie, msg []byte) error {
 		}
 		return d
 	}
+
+	if isMultisign {
+		return nil
+	}
+
 	return darc.EvalExpr(d.Rules.Get(darc.Action(instr.Action())), getDarc, instr.GetIdentityStrings()...)
 }
 
@@ -327,6 +341,8 @@ const (
 	InvokeType
 	// DeleteType represents the delete instruction type.
 	DeleteType
+	// MultisignType represents the multisign instruction type.
+	MultisignType
 )
 
 // GetType returns the type of the instruction.
@@ -337,6 +353,8 @@ func (instr Instruction) GetType() InstrType {
 		return InvokeType
 	} else if instr.Spawn == nil && instr.Invoke == nil && instr.Delete != nil {
 		return DeleteType
+	} else if instr.Multisign != nil {
+		return MultisignType
 	}
 	return InvalidInstrType
 }

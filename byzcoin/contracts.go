@@ -30,6 +30,8 @@ type Contract interface {
 	Invoke(ReadOnlyStateTrie, Instruction, []Coin) ([]StateChange, []Coin, error)
 	// Delete removes the current instance
 	Delete(ReadOnlyStateTrie, Instruction, []Coin) ([]StateChange, []Coin, error)
+	// Multisign sign a previous block
+	Multisign(ReadOnlyStateTrie, Instruction, []Coin) ([]StateChange, []Coin, error)
 }
 
 // ContractFn is the type signature of the instance factory functions which can be
@@ -81,6 +83,11 @@ func (b BasicContract) Invoke(ReadOnlyStateTrie, Instruction, []Coin) (sc []Stat
 func (b BasicContract) Delete(ReadOnlyStateTrie, Instruction, []Coin) (sc []StateChange, c []Coin, err error) {
 	err = notImpl("Delete")
 	return
+}
+
+// Multisign
+func (b BasicContract) Multisign(ReadOnlyStateTrie, Instruction, []Coin) (sc []StateChange, c []Coin, err error) {
+	return nil, nil, nil
 }
 
 //

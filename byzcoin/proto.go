@@ -177,6 +177,8 @@ type Instruction struct {
 	Invoke *Invoke
 	// Delete removes the given instance.
 	Delete *Delete
+	// Signs a transaction of a past block
+	Multisign *Multisign
 	// SignerCounter must be set to a value that is one greater than what
 	// was in the last instruction signed by the same signer. Every counter
 	// must map to the corresponding element in Signature. The initial
@@ -213,6 +215,11 @@ type Invoke struct {
 type Delete struct {
 	// ContractID represents the kind of contract that is being deleted.
 	ContractID string
+}
+
+type Multisign struct {
+	BlockId       []byte
+	InstructionId []byte
 }
 
 // Argument is a name/value pair that will be passed to the contract.

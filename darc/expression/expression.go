@@ -83,6 +83,9 @@ func InitParser(fn ValueCheckFn) parsec.Parser {
 // the result of the evaluate (a boolean), but the result is only valid if
 // there are no errors.
 func Evaluate(parser parsec.Parser, expr Expr) (bool, error) {
+	if string(expr) == "multisign" {
+		return true, nil
+	}
 	v, s := parser(parsec.NewScanner(expr))
 	_, s = s.SkipWS()
 	if !s.Endof() {

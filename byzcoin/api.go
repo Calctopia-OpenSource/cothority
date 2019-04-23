@@ -424,6 +424,9 @@ func DefaultGenesisMsg(v Version, r *onet.Roster, rules []string, ids ...darc.Id
 	if err := rs.AddRule("_sign", ownerExpr); err != nil {
 		return nil, err
 	}
+	if err := rs.AddRule("multisign", expression.InitAndExpr("multisign")); err != nil {
+		return nil, err
+	}
 	d := darc.NewDarc(rs, []byte("genesis darc"))
 
 	// extra rules
