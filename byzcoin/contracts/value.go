@@ -31,7 +31,6 @@ func contractValueFromBytes(in []byte) (byzcoin.Contract, error) {
 
 func (c *contractValue) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruction, coins []byzcoin.Coin) (sc []byzcoin.StateChange, cout []byzcoin.Coin, err error) {
 	cout = coins
-
 	// Find the darcID for this instance.
 	var darcID darc.ID
 	_, _, _, darcID, err = rst.GetValues(inst.InstanceID.Slice())
@@ -39,10 +38,9 @@ func (c *contractValue) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 		return
 	}
 
-	sc = []byzcoin.StateChange{
-		byzcoin.NewStateChange(byzcoin.Create, inst.DeriveID(""),
-			ContractValueID, inst.Spawn.Args.Search("value"), darcID),
-	}
+	newSc := byzcoin.NewStateChange(byzcoin.Create, inst.DeriveID(""),
+		ContractValueID, inst.Spawn.Args.Search("value"), darcID)
+	sc = append(sc, newSc)
 	return
 }
 

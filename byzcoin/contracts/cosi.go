@@ -1,7 +1,10 @@
 package contracts
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -10,35 +13,30 @@ import (
 	"go.dedis.ch/protobuf"
 )
 
-// The value contract can simply store a value in an instance and serves
-// mainly as a template for other contracts. It helps show the possibilities
-// of the contracts and how to use them at a very simple example.
+// The cosi contract stands for "Collective Signing" and allows a group of
+// signers to agree on and sign a proposed transaction, the "root transaction".
 
 // ContractCosiID denotes a contract that can aggregate signatures for a "root"
 // instruction
 var ContractCosiID = "cosi"
 
-// ContractValue is a simple key/value storage where you
-// can put any data inside as wished.
-// It can spawn new value instances and will store the "value" argument in these
-// new instances. Existing value instances can be updated and deleted.
-
 // CosiData ...
 type CosiData struct {
-	RootCommand []byte
-	RootDarcID  []byte
-	Timestamp   int
-	ExpireSec   int
+	RootTransaction byzcoin.ClientTransaction
+	Timestamp       uint64
+	ExpireSec       uint64
+	Hash            []byte
 }
 
 type contractCosi struct {
 	byzcoin.BasicContract
 	CosiData
+	s *byzcoin.Service
 }
 
-func contractCosiFromBytes(in []byte) (byzcoin.Contract, error) {
-	// TODO: actuall fill it
-	c := &contractCosi{}
+func (s *Service) contractCosiFromBytes(in []byte) (byzcoin.Contract, error) {
+	c := &contractCosi{s: s.byzService()}
+
 	err := protobuf.Decode(in, &c.CosiData)
 	if err != nil {
 		return nil, errors.New("couldn't unmarshal instance data: " + err.Error())
@@ -55,7 +53,7 @@ func (c *contractCosi) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruc
 	//
 	// Spawn should have those input arguments:
 	// - (name: []byte)
-	// - rootCommand:  ...
+	// - rootTransaction:  ...
 	// - rootDarcID:   ...
 	// - expire sec:   ...
 	cout = coins
@@ -67,28 +65,29 @@ func (c *contractCosi) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruc
 		return
 	}
 
-	rootCommand := inst.Spawn.Args.Search("rootCommand")
-	rootDarcID := inst.Spawn.Args.Search("rootDarcID")
-	timestamp := int(time.Now().Unix())
-	expireSec, err := strconv.Atoi(string(inst.Spawn.Args.Search("expireSec")))
+	rootTransaction := byzcoin.ClientTransaction{}
+	err = protobuf.Decode(inst.Spawn.Args.Search("rootTransaction"), &rootTransaction)
+	timestamp := uint64(time.Now().Unix())
+	expireSec, err := strconv.ParseUint(string(inst.Spawn.Args.Search("expireSec")), 10, 64)
 	if err != nil {
 		return nil, nil, errors.New("couldn't convert expireSec: " + err.Error())
 	}
+	hash := hashCosi(rootTransaction.Instructions[0], timestamp)
 
 	data := CosiData{
-		rootCommand,
-		rootDarcID,
+		rootTransaction,
 		timestamp,
 		expireSec,
+		hash,
 	}
-	var ciBuf []byte
-	ciBuf, err = protobuf.Encode(&data)
+	var dataBuf []byte
+	dataBuf, err = protobuf.Encode(&data)
 	if err != nil {
 		return nil, nil, errors.New("couldn't encode CosiData: " + err.Error())
 	}
 	sc = []byzcoin.StateChange{
 		byzcoin.NewStateChange(byzcoin.Create, inst.DeriveID(""),
-			ContractCosiID, ciBuf, darcID), // Sending only the rootCommand for the moment
+			ContractCosiID, dataBuf, darcID),
 	}
 	return
 }
@@ -100,10 +99,10 @@ func (c *contractCosi) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 	//   2. If the check is successful, add the identity the the list of
 	//      identities.
 	//
-	// Invoke should have the following input argument:
+	// Invoke:addProof should have the following input argument:
 	//   - (name: []byte)
-	//   - identity:  ...
-	//   - signature: ...
+	//   - identity:  ... of type darc.Identity
+	//   - signature: ... of type string
 	cout = coins
 
 	// Find the darcID for this instance.
@@ -115,21 +114,70 @@ func (c *contractCosi) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 	}
 
 	switch inst.Invoke.Command {
-	case "update":
-		sc = []byzcoin.StateChange{
-			byzcoin.NewStateChange(byzcoin.Update, inst.InstanceID,
-				ContractCosiID, inst.Invoke.Args.Search("signature"), darcID),
+	case "addProof":
+		identityBuf := inst.Invoke.Args.Search("identity")
+		if identityBuf == nil {
+			return nil, nil, errors.New("Identity args is nil")
+		}
+		identity := darc.Identity{}
+		err = protobuf.Decode(identityBuf, &identity)
+		if err != nil {
+			return nil, nil, errors.New("Couldn't decode Identity")
+		}
+		signature := inst.Invoke.Args.Search("signature")
+		if signature == nil {
+			return nil, nil, errors.New("Signature args is nil")
+		}
+		c.CosiData.RootTransaction.Instructions[0].SignerIdentities = append(c.CosiData.RootTransaction.Instructions[0].SignerIdentities, identity)
+		c.CosiData.RootTransaction.Instructions[0].Signatures = append(c.CosiData.RootTransaction.Instructions[0].Signatures, signature)
+		cosiDataBuf, err2 := protobuf.Encode(&c.CosiData)
+		if err2 != nil {
+			return nil, nil, errors.New("Couldn't encode CosidData")
+		}
+		sc = append(sc, byzcoin.NewStateChange(byzcoin.Update, inst.InstanceID,
+			ContractCosiID, cosiDataBuf, darcID))
+		return
+	case "execRoot":
+		instruction := c.CosiData.RootTransaction.Instructions[0]
+
+		rootInstructionID := instruction.DeriveID("").Slice()
+
+		sc = append(sc, byzcoin.NewStateChange(byzcoin.Update, inst.InstanceID,
+			ContractCosiID, rootInstructionID, darcID))
+
+		instructionType := instruction.GetType()
+		if instructionType == byzcoin.SpawnType {
+			fn, exists := c.s.GetContractConstructor(instruction.Spawn.ContractID)
+			if !exists {
+				return nil, nil, errors.New("Couldn't get the root function")
+			}
+			rootInstructionBuff, err := protobuf.Encode(&c.CosiData.RootTransaction.Instructions[0])
+			if err != nil {
+				return nil, nil, errors.New("Couldn't encode the root instruction buffer")
+			}
+			contract, err := fn(rootInstructionBuff)
+			if err != nil {
+				return nil, nil, errors.New("Couldn't get the root contract")
+			}
+
+			err = contract.VerifyInstruction(rst, instruction, c.CosiData.Hash)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Verifying the root instruction failed: %s", err)
+			}
+
+			rootSc, _, err := contract.Spawn(rst, c.CosiData.RootTransaction.Instructions[0], coins)
+			sc = append(sc, rootSc...)
 		}
 		return
 	default:
-		return nil, nil, errors.New("Cosi contract can only update")
+		return nil, nil, errors.New("Cosi contract can only addProof and execRoot")
 	}
 }
 
 func (c *contractCosi) Delete(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruction, coins []byzcoin.Coin) (sc []byzcoin.StateChange, cout []byzcoin.Coin, err error) {
 	// This method should do the following:
 	//   1. Check if the stored identities satisfy the referenced darc ID.
-	//   2. If the check passes, execute the rootCommand and destroy the
+	//   2. If the check passes, execute the rootTransaction and destroy the
 	//      stored identities.
 	cout = coins
 
@@ -144,4 +192,66 @@ func (c *contractCosi) Delete(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 		byzcoin.NewStateChange(byzcoin.Remove, inst.InstanceID, ContractCosiID, nil, darcID),
 	}
 	return
+}
+
+// VerifyInstruction overrides the basic VerifyInstruction in case of a "mine" command, because this command
+// is not protected by a darc, but by a linkable ring signature.
+func (c *contractCosi) VerifyInstruction(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruction, ctxHash []byte) error {
+	if inst.GetType() == byzcoin.InvokeType && inst.Invoke.Command == "addProof" {
+		// Standard check if the client can actually perform an "addProof"
+		err := c.BasicContract.VerifyInstruction(rst, inst, ctxHash)
+		if err != nil {
+			return err
+		}
+		// Second check if the client has the right to sign the rootInstruction
+		// TODO...
+		// ...
+		return nil
+	}
+	if inst.GetType() == byzcoin.InvokeType && inst.Invoke.Command == "execRoot" {
+		// Here we need to build the instruction from the root instruction and
+		// verify it without taking the counters into account.
+		return nil
+	}
+	// Should never reach this point
+	return nil
+}
+
+// This is a modified version of computing the hash of a transaction. In this
+// version, we do not take into account the signers nor the signers counters. We
+// also add to the hash a timestamp.
+func hashCosi(instr byzcoin.Instruction, timestamp uint64) []byte {
+	h := sha256.New()
+	h.Write(instr.InstanceID[:])
+	var args []byzcoin.Argument
+	switch instr.GetType() {
+	case byzcoin.SpawnType:
+		h.Write([]byte{0})
+		h.Write([]byte(instr.Spawn.ContractID))
+		args = instr.Spawn.Args
+	case byzcoin.InvokeType:
+		h.Write([]byte{1})
+		h.Write([]byte(instr.Invoke.ContractID))
+		args = instr.Invoke.Args
+	case byzcoin.DeleteType:
+		h.Write([]byte{2})
+		h.Write([]byte(instr.Delete.ContractID))
+	}
+	for _, a := range args {
+		nameBuf := []byte(a.Name)
+		nameLenBuf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(nameLenBuf, uint64(len(nameBuf)))
+		h.Write(nameLenBuf)
+		h.Write(nameBuf)
+
+		valueLenBuf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(valueLenBuf, uint64(len(a.Value)))
+		h.Write(valueLenBuf)
+		h.Write(a.Value)
+	}
+	timestampBuf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(timestampBuf, timestamp)
+	h.Write(timestampBuf)
+
+	return h.Sum(nil)
 }

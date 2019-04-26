@@ -269,9 +269,9 @@ func (instr Instruction) Verify(st ReadOnlyStateTrie, msg []byte) error {
 	}
 
 	// check the signature counters
-	if err := verifySignerCounters(st, instr.SignerCounter, instr.SignerIdentities); err != nil {
-		return err
-	}
+	// if err := verifySignerCounters(st, instr.SignerCounter, instr.SignerIdentities); err != nil {
+	// 	return err
+	// }
 
 	// get the valid DARC contract IDs from the configuration
 	config, err := LoadConfigFromTrie(st)

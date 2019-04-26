@@ -11,6 +11,7 @@ import (
 	"go.dedis.ch/onet/v3"
 )
 
+// This test performs a simple Spawn instruction on the value contract.
 func TestValue_Spawn(t *testing.T) {
 	local := onet.NewTCPTest(cothority.Suite)
 	defer local.CloseAll()
@@ -56,16 +57,17 @@ func TestValue_Spawn(t *testing.T) {
 	local.WaitDone(genesisMsg.BlockInterval)
 }
 
-func TestValue2_Spawn(t *testing.T) {
+// This test uses the same code as the Spawn one but then performs an upadte
+// on the value contract.
+func TestValue_Invoke(t *testing.T) {
 	local := onet.NewTCPTest(cothority.Suite)
 	defer local.CloseAll()
 
-	signer1 := darc.NewSignerEd25519(nil, nil)
-	signer2 := darc.NewSignerEd25519(nil, nil)
+	signer := darc.NewSignerEd25519(nil, nil)
 	_, roster, _ := local.GenTree(3, true)
 
 	genesisMsg, err := byzcoin.DefaultGenesisMsg(byzcoin.CurrentVersion, roster,
-		[]string{"spawn:value"}, signer1.Identity(), signer2.Identity())
+		[]string{"spawn:value", "invoke:value.update"}, signer.Identity())
 	require.Nil(t, err)
 	gDarc := &genesisMsg.GenesisDarc
 
@@ -85,17 +87,53 @@ func TestValue2_Spawn(t *testing.T) {
 					Value: myvalue,
 				}},
 			},
-			SignerCounter: []uint64{1, 1},
+			SignerCounter: []uint64{1},
 		}},
 	}
-	require.Nil(t, ctx.FillSignersAndSignWith(signer1, signer2))
+	require.Nil(t, ctx.FillSignersAndSignWith(signer))
 
 	_, err = cl.AddTransaction(ctx)
 	require.Nil(t, err)
-	pr, err := cl.WaitProof(byzcoin.NewInstanceID(ctx.Instructions[0].DeriveID("").Slice()), 2*genesisMsg.BlockInterval, myvalue)
+
+	myID := ctx.Instructions[0].DeriveID("")
+	pr, err := cl.WaitProof(byzcoin.NewInstanceID(myID.Slice()), 2*genesisMsg.BlockInterval, myvalue)
 	require.Nil(t, err)
-	require.True(t, pr.InclusionProof.Match(ctx.Instructions[0].DeriveID("").Slice()))
-	v0, _, _, err := pr.Get(ctx.Instructions[0].DeriveID("").Slice())
+	require.True(t, pr.InclusionProof.Match(myID.Slice()))
+
+	v0, _, _, err := pr.Get(myID.Slice())
+	require.Nil(t, err)
+	require.Equal(t, myvalue, v0)
+
+	local.WaitDone(genesisMsg.BlockInterval)
+
+	//
+	// Invoke part
+	//
+	myvalue = []byte("5678")
+	ctx = byzcoin.ClientTransaction{
+		Instructions: []byzcoin.Instruction{{
+			InstanceID: myID,
+			Invoke: &byzcoin.Invoke{
+				ContractID: ContractValueID,
+				Command:    "update",
+				Args: []byzcoin.Argument{{
+					Name:  "value",
+					Value: myvalue,
+				}},
+			},
+			SignerCounter: []uint64{2},
+		}},
+	}
+	require.Nil(t, ctx.FillSignersAndSignWith(signer))
+
+	_, err = cl.AddTransaction(ctx)
+	require.Nil(t, err)
+
+	pr, err = cl.WaitProof(byzcoin.NewInstanceID(myID.Slice()), 2*genesisMsg.BlockInterval, myvalue)
+	require.Nil(t, err)
+	require.True(t, pr.InclusionProof.Match(myID.Slice()))
+
+	v0, _, _, err = pr.Get(myID.Slice())
 	require.Nil(t, err)
 	require.Equal(t, myvalue, v0)
 
