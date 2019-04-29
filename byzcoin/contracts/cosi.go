@@ -160,7 +160,7 @@ func (c *contractCosi) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 				return nil, nil, errors.New("Couldn't get the root contract")
 			}
 
-			err = contract.VerifyInstruction(rst, instruction, c.CosiData.Hash)
+			err = contract.VerifyDeferedInstruction(rst, instruction, c.CosiData.Hash)
 			if err != nil {
 				return nil, nil, fmt.Errorf("Verifying the root instruction failed: %s", err)
 			}

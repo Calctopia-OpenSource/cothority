@@ -537,6 +537,56 @@ func Test2NKCR(t *testing.T) {
 
 }
 
+// Simple test to update the darc using two signers but only one is required.
+// The second signer is not allowed. This is to see if the expression works.
+func Test3NKCR(t *testing.T) {
+	var s *ser
+
+	s = newSer(t, 1, testInterval)
+
+	defer s.local.CloseAll()
+
+	signer1 := s.signer
+	signer2 := darc.NewSignerEd25519(nil, nil)
+
+	gDarc := s.darc
+
+	secDarc := gDarc.Copy()
+	action := darc.Action("invoke:darc.evolve")
+	exp := expression.InitAndExpr(
+		signer1.Identity().String(),
+	)
+	secDarc.Rules.UpdateRule(action, exp)
+	{
+		require.NoError(t, secDarc.EvolveFrom(gDarc))
+		secDarcBuf, err := secDarc.ToProto()
+		require.NoError(t, err)
+		ctx := ClientTransaction{
+			Instructions: []Instruction{{
+				InstanceID: NewInstanceID(secDarc.GetBaseID()),
+				Invoke: &Invoke{
+					ContractID: ContractDarcID,
+					Command:    cmdDarcEvolve,
+					Args: []Argument{{
+						Name:  "darc",
+						Value: secDarcBuf,
+					}},
+				},
+				SignerCounter: []uint64{1},
+			}},
+		}
+		require.Nil(t, ctx.FillSignersAndSignWith(signer2))
+		_, err = s.services[0].AddTransaction(&AddTxRequest{
+			Version:       CurrentVersion,
+			SkipchainID:   s.genesis.SkipChainID(),
+			Transaction:   ctx,
+			InclusionWait: 10,
+		})
+		require.Nil(t, err)
+	}
+
+}
+
 // -
 // --
 

@@ -206,6 +206,7 @@ func TestCosi_Scenario(t *testing.T) {
 
 	signature, err := signer.Sign(rootHash)
 	require.Nil(t, err)
+	// signature[1] = 0xf
 
 	ctx = byzcoin.ClientTransaction{
 		Instructions: []byzcoin.Instruction{{
@@ -284,7 +285,9 @@ func TestCosi_Scenario(t *testing.T) {
 	identityBuf, err = protobuf.Encode(&identity)
 	require.Nil(t, err)
 
-	signature = make([]byte, 64)
+	signature, err = signer2.Sign(rootHash)
+	require.Nil(t, err)
+	signature[1] = 0xf // Simulates a wrong signature
 
 	ctx = byzcoin.ClientTransaction{
 		Instructions: []byzcoin.Instruction{{
@@ -368,7 +371,7 @@ func TestCosi_Scenario(t *testing.T) {
 	require.Nil(t, err)
 
 	// Need to sleep because we can't predict the output (hence the 'nil')
-	time.Sleep(4 * genesisMsg.BlockInterval)
+	time.Sleep(2 * genesisMsg.BlockInterval)
 	pr, err = cl.WaitProof(byzcoin.NewInstanceID(myID.Slice()), 2*genesisMsg.BlockInterval, nil)
 	require.Nil(t, err)
 	require.True(t, pr.InclusionProof.Match(myID.Slice()))
@@ -377,7 +380,7 @@ func TestCosi_Scenario(t *testing.T) {
 
 	local.WaitDone(genesisMsg.BlockInterval)
 
-	time.Sleep(4 * genesisMsg.BlockInterval)
+	time.Sleep(2 * genesisMsg.BlockInterval)
 	pr, err = cl.WaitProof(byzcoin.NewInstanceID(dataBuf), 2*genesisMsg.BlockInterval, nil)
 	require.Nil(t, err)
 	require.True(t, pr.InclusionProof.Match(dataBuf))
