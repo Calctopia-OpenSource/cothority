@@ -1,14 +1,17 @@
 package clicontracts
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 
 	"go.dedis.ch/cothority/v3/byzcoin"
 	"go.dedis.ch/cothority/v3/byzcoin/bcadmin/lib"
 	"go.dedis.ch/cothority/v3/byzcoin/contracts"
 	"go.dedis.ch/cothority/v3/darc"
+	"go.dedis.ch/protobuf"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -63,6 +66,25 @@ func ValueSpawn(c *cli.Context) error {
 		},
 	}
 
+	redirect := c.Bool("redirect")
+	if redirect {
+		proposedTransaction := byzcoin.ClientTransaction{
+			Instructions: []byzcoin.Instruction{
+				byzcoin.Instruction{
+					InstanceID: byzcoin.NewInstanceID(d.GetBaseID()),
+					Spawn:      &spawn,
+				},
+			},
+		}
+		proposedTransactionBuf, err := protobuf.Encode(&proposedTransaction)
+		if err != nil {
+			return errors.New("Couldn't encode the transaction: " + err.Error())
+		}
+		reader := bytes.NewReader(proposedTransactionBuf)
+		io.Copy(c.App.Writer, reader)
+		return nil
+	}
+
 	ctx := byzcoin.ClientTransaction{
 		Instructions: []byzcoin.Instruction{
 			{
@@ -72,6 +94,7 @@ func ValueSpawn(c *cli.Context) error {
 			},
 		},
 	}
+
 	err = ctx.FillSignersAndSignWith(*signer)
 	if err != nil {
 		return err
