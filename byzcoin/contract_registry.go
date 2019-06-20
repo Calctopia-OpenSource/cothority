@@ -2,9 +2,6 @@ package byzcoin
 
 import "sync"
 
-// This static variable is a struct that contains the registry. It should be
-// only accessed via the RegisterContract and GetContractConstructor methods.
-
 // ContractRegistry wraps registry to a struct with a mutex for thread safe
 // operations.
 type ContractRegistry struct {
@@ -12,7 +9,7 @@ type ContractRegistry struct {
 	registry map[string]ContractFn
 }
 
-// NewContractRegistry ...
+// NewContractRegistry returns a new struct of ContractRegistry
 func NewContractRegistry() ContractRegistry {
 	return ContractRegistry{
 		registry: make(map[string]ContractFn),
