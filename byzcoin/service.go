@@ -72,6 +72,9 @@ var ByzCoinID onet.ServiceID
 // Verify is the verifier ID for ByzCoin skipchains.
 var Verify = skipchain.VerifierID(uuid.NewV5(uuid.NamespaceURL, "ByzCoin"))
 
+// Registry performs the mapping between contract name and its constructor
+var Registry = NewContractRegistry()
+
 func init() {
 	var err error
 	ByzCoinID, err = onet.RegisterNewServiceWithSuite(ServiceName, pairingSuite, newService)
@@ -79,9 +82,9 @@ func init() {
 	network.RegisterMessages(&bcStorage{}, &DataHeader{}, &DataBody{})
 	viewChangeMsgID = network.RegisterMessage(&viewchange.InitReq{})
 
-	RegisterContract(ContractConfigID, contractConfigFromBytes)
-	RegisterContract(ContractDarcID, contractSecureDarcFromBytes)
-	RegisterContract(ContractDeferredID, contractDeferredFromBytes)
+	Registry.RegisterContract(ContractConfigID, contractConfigFromBytes)
+	Registry.RegisterContract(ContractDarcID, contractSecureDarcFromBytes)
+	Registry.RegisterContract(ContractDeferredID, contractDeferredFromBytes)
 }
 
 // GenNonce returns a random nonce.
@@ -230,7 +233,7 @@ func (s *Service) CreateGenesisBlock(req *CreateGenesisBlock) (
 		return nil, errors.New("must provide at least one DARC contract")
 	}
 	for _, c := range req.DarcContractIDs {
-		if _, ok := GetContractConstructor(c); !ok {
+		if _, ok := Registry.GetContractConstructor(c); !ok {
 			return nil, errors.New("the given contract \"" + c + "\" does not exist")
 		}
 	}
@@ -1940,11 +1943,11 @@ func (s *Service) executeInstruction(st ReadOnlyStateTrie, cin []Coin, instr Ins
 		return
 	}
 
-	contractFactory, exists := GetContractConstructor(contractID)
+	contractFactory, exists := Registry.GetContractConstructor(contractID)
 	if !exists && ConfigInstanceID.Equal(instr.InstanceID) {
 		// Special case: first time call to genesis-configuration must return
 		// correct contract type.
-		contractFactory, exists = GetContractConstructor(ContractConfigID)
+		contractFactory, exists = Registry.GetContractConstructor(ContractConfigID)
 	}
 
 	// If the leader does not have a verifier for this contract, it drops the

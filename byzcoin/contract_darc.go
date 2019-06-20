@@ -82,7 +82,7 @@ func (c *contractSecureDarc) Spawn(rst ReadOnlyStateTrie, inst Instruction, coin
 	// If we got here this is a spawn:xxx in order to spawn
 	// a new instance of contract xxx, so do that.
 
-	cfact, found := GetContractConstructor(inst.Spawn.ContractID)
+	cfact, found := Registry.GetContractConstructor(inst.Spawn.ContractID)
 	if !found {
 		return nil, nil, errors.New("couldn't find this contract type: " + inst.Spawn.ContractID)
 	}

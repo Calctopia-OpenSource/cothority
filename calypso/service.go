@@ -68,6 +68,8 @@ const calypsoReshareProto = "calypso_reshare_proto"
 
 var allowInsecureAdmin = false
 
+var registry = byzcoin.NewContractRegistry()
+
 func init() {
 	var err error
 	_, err = onet.GlobalProtocolRegister(calypsoReshareProto, dkgprotocol.NewSetup)
@@ -747,9 +749,9 @@ func newService(c *onet.Context) (onet.Service, error) {
 		s.GetLTSReply, s.Authorise, s.Authorize); err != nil {
 		return nil, errors.New("couldn't register messages")
 	}
-	byzcoin.RegisterContract(ContractWriteID, contractWriteFromBytes)
-	byzcoin.RegisterContract(ContractReadID, contractReadFromBytes)
-	byzcoin.RegisterContract(ContractLongTermSecretID, contractLTSFromBytes)
+	registry.RegisterContract(ContractWriteID, contractWriteFromBytes)
+	registry.RegisterContract(ContractReadID, contractReadFromBytes)
+	registry.RegisterContract(ContractLongTermSecretID, contractLTSFromBytes)
 
 	err := s.tryLoad()
 	if err != nil {

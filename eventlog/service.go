@@ -325,7 +325,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err := s.RegisterHandlers(s.Search); err != nil {
 		log.ErrFatal(err, "Couldn't register messages")
 	}
-	byzcoin.RegisterContract(contractName, contractFromBytes)
+	byzcoin.Registry.RegisterContract(contractName, contractFromBytes)
 	return s, nil
 }
 

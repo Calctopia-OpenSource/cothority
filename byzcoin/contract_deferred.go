@@ -259,7 +259,7 @@ func (c *contractDeferred) Invoke(rst ReadOnlyStateTrie, inst Instruction, coins
 				return nil, nil, errors.New("couldn't get contract buf: " + err.Error())
 			}
 			// Get the contract's constructor (like "contractValueFromByte(...)")
-			fn, exists := GetContractConstructor(contractID)
+			fn, exists := Registry.GetContractConstructor(contractID)
 			if !exists {
 				return nil, nil, errors.New("couldn't get the root function")
 			}

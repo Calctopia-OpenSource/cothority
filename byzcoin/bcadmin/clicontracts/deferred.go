@@ -448,7 +448,7 @@ func DeferredGet(c *cli.Context) error {
 		return errors.New("Failed to decode the result: " + err.Error())
 	}
 
-	fmt.Fprintf(c.App.Writer, "%s\n", result)
+	fmt.Fprintf(c.App.Writer, "%s\n", result.String())
 
 	return nil
 }
