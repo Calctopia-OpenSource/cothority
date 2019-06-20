@@ -34,11 +34,6 @@ import (
 	uuid "gopkg.in/satori/go.uuid.v1"
 )
 
-// ContractsFn maps a contract name to its constructor. Access to this map is
-// not threadsafe, so it must only be written to from a package's init()
-// function.
-var ContractsFn = make(map[string]ContractFn)
-
 var pairingSuite = suites.MustFind("bn256.adapter").(*pairing.SuiteBn256)
 
 // This is to boost the acceptable timestamp window when dealing with
@@ -84,9 +79,9 @@ func init() {
 	network.RegisterMessages(&bcStorage{}, &DataHeader{}, &DataBody{})
 	viewChangeMsgID = network.RegisterMessage(&viewchange.InitReq{})
 
-	ContractsFn[ContractConfigID] = contractConfigFromBytes
-	ContractsFn[ContractDarcID] = contractSecureDarcFromBytes
-	ContractsFn[ContractDeferredID] = contractDeferredFromBytes
+	RegisterContract(ContractConfigID, contractConfigFromBytes)
+	RegisterContract(ContractDarcID, contractSecureDarcFromBytes)
+	RegisterContract(ContractDeferredID, contractDeferredFromBytes)
 }
 
 // GenNonce returns a random nonce.
@@ -235,7 +230,7 @@ func (s *Service) CreateGenesisBlock(req *CreateGenesisBlock) (
 		return nil, errors.New("must provide at least one DARC contract")
 	}
 	for _, c := range req.DarcContractIDs {
-		if _, ok := s.GetContractConstructor(c); !ok {
+		if _, ok := GetContractConstructor(c); !ok {
 			return nil, errors.New("the given contract \"" + c + "\" does not exist")
 		}
 	}
@@ -1927,10 +1922,10 @@ func (s *Service) processOneTx(sst *stagingStateTrie, tx ClientTransaction) (Sta
 
 // GetContractConstructor gets the contract constructor of the contract
 // contractName.
-func (s *Service) GetContractConstructor(contractName string) (ContractFn, bool) {
-	fn, exists := ContractsFn[contractName]
-	return fn, exists
-}
+// func (s *Service) GetContractConstructor(contractName string) (ContractFn, bool) {
+// 	fn, exists := ContractsFn[contractName]
+// 	return fn, exists
+// }
 
 func (s *Service) executeInstruction(st ReadOnlyStateTrie, cin []Coin, instr Instruction, ctxHash []byte) (scs StateChanges, cout []Coin, err error) {
 	defer func() {
@@ -1945,11 +1940,11 @@ func (s *Service) executeInstruction(st ReadOnlyStateTrie, cin []Coin, instr Ins
 		return
 	}
 
-	contractFactory, exists := ContractsFn[contractID]
+	contractFactory, exists := GetContractConstructor(contractID)
 	if !exists && ConfigInstanceID.Equal(instr.InstanceID) {
 		// Special case: first time call to genesis-configuration must return
 		// correct contract type.
-		contractFactory, exists = ContractsFn[ContractConfigID]
+		contractFactory, exists = GetContractConstructor(ContractConfigID)
 	}
 
 	// If the leader does not have a verifier for this contract, it drops the
@@ -2171,10 +2166,10 @@ func (s *Service) monitorLeaderFailure() {
 
 // registerContract stores the contract in a map and will
 // call it whenever a contract needs to be done.
-func (s *Service) registerContract(contractID string, c ContractFn) error {
-	ContractsFn[contractID] = c
-	return nil
-}
+// func (s *Service) registerContract(contractID string, c ContractFn) error {
+// 	ContractsFn[contractID] = c
+// 	return nil
+// }
 
 // startAllChains loads the configuration, updates the data in the service if
 // it finds a valid config-file and synchronises skipblocks if it can contact

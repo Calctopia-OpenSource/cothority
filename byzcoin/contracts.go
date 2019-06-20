@@ -13,7 +13,6 @@ import (
 	"go.dedis.ch/cothority/v3/byzcoin/viewchange"
 	"go.dedis.ch/cothority/v3/darc"
 	"go.dedis.ch/cothority/v3/darc/expression"
-	"go.dedis.ch/cothority/v3/skipchain"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
@@ -81,13 +80,13 @@ type ContractFn func(in []byte) (Contract, error)
 // RegisterContract stores the contract in a map and will call it whenever a
 // contract needs to be done. GetService makes it possible to give either an
 // `onet.Context` or `onet.Server` to `RegisterContract`.
-func RegisterContract(s skipchain.GetService, contractID string, f ContractFn) error {
-	scs := s.Service(ServiceName)
-	if scs == nil {
-		return errors.New("Didn't find our service: " + ServiceName)
-	}
-	return scs.(*Service).registerContract(contractID, f)
-}
+// func RegisterContract(s skipchain.GetService, contractID string, f ContractFn) error {
+// 	scs := s.Service(ServiceName)
+// 	if scs == nil {
+// 		return errors.New("Didn't find our service: " + ServiceName)
+// 	}
+// 	return scs.(*Service).registerContract(contractID, f)
+// }
 
 // BasicContract is a type that contracts may choose to embed in order to provide
 // default implementations for the Contract interface.

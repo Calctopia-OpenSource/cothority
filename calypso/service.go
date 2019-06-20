@@ -747,21 +747,15 @@ func newService(c *onet.Context) (onet.Service, error) {
 		s.GetLTSReply, s.Authorise, s.Authorize); err != nil {
 		return nil, errors.New("couldn't register messages")
 	}
-	err := byzcoin.RegisterContract(c, ContractWriteID, contractWriteFromBytes)
+	byzcoin.RegisterContract(ContractWriteID, contractWriteFromBytes)
+	byzcoin.RegisterContract(ContractReadID, contractReadFromBytes)
+	byzcoin.RegisterContract(ContractLongTermSecretID, contractLTSFromBytes)
+
+	err := s.tryLoad()
 	if err != nil {
-		return nil, err
-	}
-	err = byzcoin.RegisterContract(c, ContractReadID, contractReadFromBytes)
-	if err != nil {
-		return nil, err
-	}
-	err = byzcoin.RegisterContract(c, ContractLongTermSecretID, contractLTSFromBytes)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.tryLoad(); err != nil {
 		log.Error(err)
 		return nil, err
 	}
+
 	return s, nil
 }

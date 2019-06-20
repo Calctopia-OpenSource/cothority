@@ -1,11 +1,9 @@
 package contracts
 
-import (
-	"go.dedis.ch/cothority/v3/byzcoin"
-)
+import "go.dedis.ch/cothority/v3/byzcoin"
 
 func init() {
-	byzcoin.ContractsFn[ContractValueID] = contractValueFromBytes
-	byzcoin.ContractsFn[ContractCoinID] = contractCoinFromBytes
-	byzcoin.ContractsFn[ContractInsecureDarcID] = contractInsecureDarcFromBytes
+	byzcoin.RegisterContract(ContractValueID, contractValueFromBytes)
+	byzcoin.RegisterContract(ContractCoinID, contractCoinFromBytes)
+	byzcoin.RegisterContract(ContractInsecureDarcID, contractInsecureDarcFromBytes)
 }

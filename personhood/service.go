@@ -315,10 +315,10 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err := s.RegisterHandlers(s.Capabilities, s.Meetup, s.Poll, s.RoPaSciList, s.PartyList); err != nil {
 		return nil, errors.New("couldn't register messages")
 	}
-	byzcoin.RegisterContract(c, ContractPopPartyID, ContractPopPartyFromBytes)
-	byzcoin.RegisterContract(c, ContractSpawnerID, ContractSpawnerFromBytes)
-	byzcoin.RegisterContract(c, ContractCredentialID, ContractCredentialFromBytes)
-	byzcoin.RegisterContract(c, ContractRoPaSciID, ContractRoPaSciFromBytes)
+	byzcoin.RegisterContract(ContractPopPartyID, ContractPopPartyFromBytes)
+	byzcoin.RegisterContract(ContractSpawnerID, ContractSpawnerFromBytes)
+	byzcoin.RegisterContract(ContractCredentialID, ContractCredentialFromBytes)
+	byzcoin.RegisterContract(ContractRoPaSciID, ContractRoPaSciFromBytes)
 
 	if err := s.tryLoad(); err != nil {
 		log.Error(err)

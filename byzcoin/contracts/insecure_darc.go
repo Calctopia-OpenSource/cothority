@@ -49,7 +49,7 @@ func (c *contractInsecureDarc) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin
 	// If we got here this is a spawn:xxx in order to spawn
 	// a new instance of contract xxx, so do that.
 
-	cfact, found := byzcoin.ContractsFn[inst.Spawn.ContractID]
+	cfact, found := byzcoin.GetContractConstructor(inst.Spawn.ContractID)
 	if !found {
 		return nil, nil, errors.New("couldn't find this contract type: " + inst.Spawn.ContractID)
 	}
