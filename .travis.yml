@@ -44,7 +44,7 @@ stages:
   - build
   - test
   - name: deploy
-    if: branch = travis-test
+    if: branch = "travis-test"
 
 jobs:
   include:
