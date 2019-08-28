@@ -43,8 +43,7 @@ stages:
   - lint
   - build
   - test
-  - name: deploy
-    if: branch = "travis-test"
+  - deploy
 
 jobs:
   include:
