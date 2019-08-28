@@ -58,10 +58,10 @@ jobs:
         - echo "with range:"
         - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
         - echo "$CHANGED_FILES"
-        - "[ $(echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/") -gt 0 ] && BUILD_COTHORITY=ok"
-        - "[ $(echo "$CHANGED_FILES" | grep -E -o "^external/js/kyber/") -gt 0 ] && BUILD_KYBER=ok"
-        - echo "cothority:$BUILD_COTHORITY"
-        - echo "kyber:$BUILD_KYBER"
+        - BUILD_COTHORITY=$(echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/")
+        - BUILD_KYBER=$(echo "$CHANGED_FILES" | grep -E -o "^external/js/kyber/")
+        - echo "cothority: $BUILD_COTHORITY"
+        - echo "kyber: $BUILD_KYBER"
     #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
@@ -134,7 +134,7 @@ jobs:
       deploy:
         on:
           branch: travis-test
-          condition: $BUILD_COTHORITY = ok
+          condition: $BUILD_COTHORITY != 0
         provider: script
         script: >-
           cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
