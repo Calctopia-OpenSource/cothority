@@ -29,7 +29,7 @@ This is an overview of this README:
 
 Don't forget that the cothority is part of a [bigger
 environment](https://github.com/dedis/doc/tree/master/README.md).
-
+random change
 ## Versioning and Roadmap
 
 We started to work on a 6-monthly cycle, synched up with the semesters at EPFL. From

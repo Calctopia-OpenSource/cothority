@@ -29,7 +29,7 @@ appname=`basename $0`
 start_toc='<!-- START '$appname' generated TOC please keep comment here to allow auto update -->'
 info_toc='<!-- DO NOT EDIT THIS SECTION, INSTEAD RE-RUN '$appname' TO UPDATE -->'
 end_toc='<!-- END '$appname' generated TOC please keep comment here to allow auto update -->'
-
+# random change
 check() {
     # Check if argument found
     if [ -z "$1" ]; then
