@@ -56,7 +56,7 @@ jobs:
         - a=$(git diff --name-only)
         - echo "$a"
         - echo "with range:"
-        - CHANGED_FILES=($(git diff --name-only $TRAVIS_COMMIT_RANGE))
+        - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
         - echo "$CHANGED_FILES"
     #   before_script: *get_coding 
     #   script: make test_proto
