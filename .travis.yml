@@ -115,7 +115,7 @@ jobs:
         script: >-
           cd external/js/kyber &&
           npm ci &&
-          npm version prerelease --preid=p`date +%Y%m%d%H%M%S` &&
+          npm version prerelease --preid=pre.`date +%Y%m%d%H%M%S` &&
           ./publish.sh --tag dev
     - name: "NPM: js > cothority"
       <<: *stage_deploy_npm
@@ -128,7 +128,7 @@ jobs:
           cd external/js/cothority &&
           npm ci &&
           npm link @dedis/kyber &&
-          npm version prerelease --preid=p`date +%Y%m%d%H%M%S` &&
+          npm version prerelease --preid=pre.$(git rev-parse --short ${TRAVIS_COMMIT}) &&
           ./publish.sh --tag dev
 
 notifications:
