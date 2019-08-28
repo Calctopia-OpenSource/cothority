@@ -33,7 +33,18 @@ _: &stage_test_go
   script: GO111MODULE=on make test_goveralls
 _: &stage_deploy_npm
   <<: *language_js
-  script: skip
+  script: 
+    - echo "$TRAVIS_COMMIT_RANGE"
+    - echo "git diff:"
+    - a=$(git diff --name-only)
+    - echo "$a"
+    - echo "with range:"
+    - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
+    - echo "$CHANGED_FILES"
+    - BUILD_COTHORITY=`echo "$CHANGED_FILES" | grep -E -c "^external/js/cothority/" || true`
+    - BUILD_KYBER=`echo "$CHANGED_FILES" | grep -E -c "^external/js/kyber/" || true`
+    - echo "cothority=$BUILD_COTHORITY"
+    - echo "kyber=$BUILD_KYBER"
   before_deploy: echo "//registry.npmjs.org/:_authToken=${DEPLOY_NPM_TOKEN}" > $HOME/.npmrc
 
 
@@ -50,18 +61,6 @@ jobs:
     - stage: lint
       name: "protobuf"
       language: minimal
-      script: 
-        - echo "$TRAVIS_COMMIT_RANGE"
-        - echo "git diff:"
-        - a=$(git diff --name-only)
-        - echo "$a"
-        - echo "with range:"
-        - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
-        - echo "$CHANGED_FILES"
-        - BUILD_COTHORITY=`echo "$CHANGED_FILES" | grep -E -c "^external/js/cothority/" || true`
-        - BUILD_KYBER=`echo "$CHANGED_FILES" | grep -E -c "^external/js/kyber/" || true`
-        - echo "cothority=$BUILD_COTHORITY"
-        - echo "kyber=$BUILD_KYBER"
     #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
