@@ -60,8 +60,8 @@ jobs:
         - echo "$CHANGED_FILES"
         - [ $(echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/") -gt 0 ] && BUILD_COTHORITY=ok
         - [ $(echo "$CHANGED_FILES" | grep -E -o "^external/js/kyber/") -gt 0 ] && BUILD_KYBER=ok
-        - echo "cothority: $BUILD_COTHORITY"
-        - echo "kyber: $BUILD_KYBER"
+        - echo "cothority:$BUILD_COTHORITY"
+        - echo "kyber:$BUILD_KYBER"
     #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
