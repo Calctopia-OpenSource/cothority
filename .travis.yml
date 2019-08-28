@@ -58,6 +58,10 @@ jobs:
         - echo "with range:"
         - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
         - echo "$CHANGED_FILES"
+        - [ $(echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/") -gt 0 ] && BUILD_COTHORITY=ok
+        - [ $(echo "$CHANGED_FILES" | grep -E -o "^external/js/kyber/") -gt 0 ] && BUILD_KYBER=ok
+        - echo "cothority: $BUILD_COTHORITY"
+        - echo "kyber: $BUILD_KYBER"
     #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
@@ -115,29 +119,30 @@ jobs:
     #     - npm link @dedis/kyber
     #     - npm run test
 
-    # - stage: deploy
-    #   name: "NPM: js > kyber"
-    #   <<: *stage_deploy_npm
-    #   deploy:
-    #     provider: script
-    #     script: >-
-    #       cd external/js/kyber &&
-    #       npm ci &&
-    #       npm version prerelease --preid=p`date +%Y%m%d%H%M%S` &&
-    #       ./publish.sh --tag dev
-    # - name: "NPM: js > cothority"
-    #   <<: *stage_deploy_npm
-    #   deploy:
-    #     on:
-    #       branch: travis-test
-    #     provider: script
-    #     script: >-
-    #       cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
-    #       cd external/js/cothority &&
-    #       npm ci &&
-    #       npm link @dedis/kyber &&
-    #       npm version prerelease --preid=pre &&
-    #       ./publish.sh --tag dev
+    - stage: deploy
+      name: "NPM: js > kyber"
+      <<: *stage_deploy_npm
+      deploy:
+        provider: script
+        script: >-
+          cd external/js/kyber &&
+          npm ci &&
+          npm version prerelease --preid=p`date +%Y%m%d%H%M%S` &&
+          ./publish.sh --tag dev
+    - name: "NPM: js > cothority"
+      <<: *stage_deploy_npm
+      deploy:
+        on:
+          branch: travis-test
+          condition: $BUILD_COTHORITY = ok
+        provider: script
+        script: >-
+          cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
+          cd external/js/cothority &&
+          npm ci &&
+          npm link @dedis/kyber &&
+          npm version prerelease --preid=pretest &&
+          ./publish.sh --tag dev
 
 notifications:
   email: false
