@@ -120,6 +120,8 @@ jobs:
     - name: "NPM: js > cothority"
       <<: *stage_deploy_npm
       deploy:
+        on:
+          branch: travis-test
         provider: script
         script: >-
           cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
