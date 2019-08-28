@@ -58,10 +58,10 @@ jobs:
         - echo "with range:"
         - CHANGED_FILES=$(git diff --name-only $TRAVIS_COMMIT_RANGE)
         - echo "$CHANGED_FILES"
-        - BUILD_COTHORITY=$(echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/")
-        - BUILD_KYBER=$(echo "$CHANGED_FILES" | grep -E -o "^external/js/kyber/")
-        - echo "cothority: $BUILD_COTHORITY"
-        - echo "kyber: $BUILD_KYBER"
+        - BUILD_COTHORITY=`echo "$CHANGED_FILES" | grep -E -o -c "^external/js/cothority/"`
+        - BUILD_KYBER=`echo "$CHANGED_FILES" | grep -E -o -c "^external/js/kyber/"`
+        - echo "cothority=$BUILD_COTHORITY"
+        - echo "kyber=$BUILD_KYBER"
     #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
