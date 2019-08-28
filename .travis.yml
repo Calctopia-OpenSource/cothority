@@ -58,7 +58,7 @@ jobs:
         - echo "with range:"
         - CHANGED_FILES=($(git diff --name-only $TRAVIS_COMMIT_RANGE))
         - echo "$CHANGED_FILES"
-    #   before_script: *get_coding
+    #   before_script: *get_coding 
     #   script: make test_proto
     # - <<: *stage_lint_go
     #   <<: *language_go_1_11
