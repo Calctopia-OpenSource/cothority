@@ -50,86 +50,90 @@ jobs:
     - stage: lint
       name: "protobuf"
       language: minimal
-      before_script: *get_coding
-      script: make test_proto
-    - <<: *stage_lint_go
-      <<: *language_go_1_11
-    - <<: *stage_lint_go
-      <<: *language_go_1_12
+      script: 
+        - echo "$TRAVIS_COMMIT_RANGE"
+        - echo "git diff:"
+        - git diff --name-only
+    #   before_script: *get_coding
+    #   script: make test_proto
+    # - <<: *stage_lint_go
+    #   <<: *language_go_1_11
+    # - <<: *stage_lint_go
+    #   <<: *language_go_1_12
 
-    - stage: build
-      <<: *stage_build_go
-      <<: *language_go_1_11
-    - <<: *stage_build_go
-      <<: *language_go_1_12
+    # - stage: build
+    #   <<: *stage_build_go
+    #   <<: *language_go_1_11
+    # - <<: *stage_build_go
+    #   <<: *language_go_1_12
 
-    - name: "js > kyber"
-      <<: *language_js
-      script:
-        - cd external/js/kyber
-        - npm ci
-        - npm run build
-    - name: "js > cothority"
-      <<: *language_js
-      script:
-        - *gen_link_kyber
-        - cd external/js/cothority
-        - npm ci
-        - npm link @dedis/kyber
-        - npm run build
+    # - name: "js > kyber"
+    #   <<: *language_js
+    #   script:
+    #     - cd external/js/kyber
+    #     - npm ci
+    #     - npm run build
+    # - name: "js > cothority"
+    #   <<: *language_js
+    #   script:
+    #     - *gen_link_kyber
+    #     - cd external/js/cothority
+    #     - npm ci
+    #     - npm link @dedis/kyber
+    #     - npm run build
 
-    - stage: test
-      <<: *stage_test_go
-      <<: *language_go_1_11
-    - <<: *stage_test_go
-      <<: *language_go_1_12
-    - name: "java"
-      language: java
-      install: *get_go
-      before_script: *get_coding
-      script: make test_java
-    - name: "js > kyber"
-      <<: *language_js
-      script:
-        - cd external/js/kyber
-        - npm ci
-        - npm run test
-    - name: "js > cothority"
-      <<: *language_js
-      install: *get_go
-      before_script:
-        - *get_coding
-        - make docker
-        - *gen_link_kyber
-      script:
-        - cd external/js/cothority
-        - npm ci
-        - npm link @dedis/kyber
-        - npm run test
+    # - stage: test
+    #   <<: *stage_test_go
+    #   <<: *language_go_1_11
+    # - <<: *stage_test_go
+    #   <<: *language_go_1_12
+    # - name: "java"
+    #   language: java
+    #   install: *get_go
+    #   before_script: *get_coding
+    #   script: make test_java
+    # - name: "js > kyber"
+    #   <<: *language_js
+    #   script:
+    #     - cd external/js/kyber
+    #     - npm ci
+    #     - npm run test
+    # - name: "js > cothority"
+    #   <<: *language_js
+    #   install: *get_go
+    #   before_script:
+    #     - *get_coding
+    #     - make docker
+    #     - *gen_link_kyber
+    #   script:
+    #     - cd external/js/cothority
+    #     - npm ci
+    #     - npm link @dedis/kyber
+    #     - npm run test
 
-    - stage: deploy
-      name: "NPM: js > kyber"
-      <<: *stage_deploy_npm
-      deploy:
-        provider: script
-        script: >-
-          cd external/js/kyber &&
-          npm ci &&
-          npm version prerelease --preid=pre.`date +%Y%m%d%H%M%S` &&
-          ./publish.sh --tag dev
-    - name: "NPM: js > cothority"
-      <<: *stage_deploy_npm
-      deploy:
-        on:
-          branch: travis-test
-        provider: script
-        script: >-
-          cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
-          cd external/js/cothority &&
-          npm ci &&
-          npm link @dedis/kyber &&
-          npm version prerelease --preid=pre.$(git rev-parse --short ${TRAVIS_COMMIT}) &&
-          ./publish.sh --tag dev
+    # - stage: deploy
+    #   name: "NPM: js > kyber"
+    #   <<: *stage_deploy_npm
+    #   deploy:
+    #     provider: script
+    #     script: >-
+    #       cd external/js/kyber &&
+    #       npm ci &&
+    #       npm version prerelease --preid=p`date +%Y%m%d%H%M%S` &&
+    #       ./publish.sh --tag dev
+    # - name: "NPM: js > cothority"
+    #   <<: *stage_deploy_npm
+    #   deploy:
+    #     on:
+    #       branch: travis-test
+    #     provider: script
+    #     script: >-
+    #       cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
+    #       cd external/js/cothority &&
+    #       npm ci &&
+    #       npm link @dedis/kyber &&
+    #       npm version prerelease --preid=pre &&
+    #       ./publish.sh --tag dev
 
 notifications:
   email: false
