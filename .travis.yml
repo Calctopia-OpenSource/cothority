@@ -134,7 +134,7 @@ jobs:
       deploy:
         on:
           branch: travis-test
-          condition: $BUILD_COTHORITY != 0
+          condition: $BUILD_COTHORITY != "0"
         provider: script
         script: >-
           cd external/js/kyber && npm ci && npm run link && cd ../../.. &&
