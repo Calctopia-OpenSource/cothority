@@ -1,9 +1,4 @@
-[![Build Status](https://travis-ci.org/dedis/cothority.svg?branch=master)](https://travis-ci.org/dedis/cothority) [![Coverage Status](https://coveralls.io/repos/github/dedis/cothority/badge.svg)](https://coveralls.io/github/dedis/cothority)
-
-Navigation: [DEDIS](https://github.com/dedis/doc/tree/master/README.md) ::
-Cothority
-
-This repository is currently maintained by [C4DT](https://www.c4dt.org).
+[![Build Status](https://travis-ci.com/Calctopia-OpenSource/cothority.svg?branch=master)](https://travis-ci.com/Calctopia-OpenSource/cothority) [![Coverage Status](https://coveralls.io/repos/github/Calctopia-OpenSource/cothority/badge.svg)](https://coveralls.io/github/Calctopia-OpenSource/cothority)
 
 # Cothority
 
@@ -12,9 +7,8 @@ development, analysis, and deployment of decentralized, distributed
 (cryptographic) protocols. A given set of servers running these protocols is
 referred to as a _collective authority_ or _cothority_. Individual servers are
 called _cothority servers_ or _conodes_. The code in this repository allows you
-to access the services of a cothority and/or run your own conode. The cothority
-project is developed and maintained by the [DEDIS](http://dedis.epfl.ch) lab at
-[EPFL](https://epfl.ch). To read more about cothorites you can have a look at
+to access the services of a cothority and/or run your own conode. 
+To read more about cothorites you can have a look at
 [the following paper](https://dedis.cs.yale.edu/dissent/papers/witness-abs/).
 
 This is an overview of this README:
@@ -29,37 +23,6 @@ This is an overview of this README:
 - [Participating](#participating-in-the-cothority) on how to help us getting cothority even better
   - [Setting up your own conode](#setting-up-your-own-conode) describes why you
     might want to set up your own conode
-
-Don't forget that the cothority is part of a [bigger
-environment](https://github.com/dedis/doc/tree/master/README.md).
-
-## Versioning and Roadmap
-
-The cothority repository is currently being maintained by the factory team
- of https://c4dt.org.
-We're mostly following semantic versioning, but since DEDIS is not adding new
- features to the project anymore, we suppose that the major version 3 is the
-  last one.
-Which means that we're trying hard not to break backward-compatibility
-, except for currently unstable features like BEVM.
-For new features, please wait for https://github.com/dedis/dela to stabilize.
-
-The Factory team at C4DT has the following plans to be implemented in the
- cothority, which mostly concentrates on ByzCoin:
-- hardening: https://github.com/c4dt/byzcoin/issues/14
-- new features: https://github.com/c4dt/omniledger/issues/211
-
-The nodes running at https://status.dedis.ch do not use any versioning, but
- are rather deployed once a day using the latest code.
-This is done in https://github.com/c4dt/byzcoin.
-
-For the typescript libraries, we do use semantic versioning, as they are
- included by external apps.
-Please have a look at [PUBLISH.md](./PUBLISH.md) to see how that works.
-
-The exception to the above are the e-voting binaries which are published
-by tagging a release in this repository. Please have a look at
-[PUBLISH.md](./PUBLISH.md) for information on creating a release for e-voting.
 
 
 ### Release v3.1.0
@@ -241,20 +204,6 @@ here: [Cothority Simulations](doc/Simulation.md).
 If you're just curious how things work, you can check the status of our test
 network or create a collective signature using our running nodes:
 
-## Status
-
-To get the status of the conodes in the cothority, first install the `status` binary:
-
-```
-go install ./status
-```
-
-Now you can run it by giving the definition of the dedis-cothority on the command line:
-
-```
-status -g dedis-cothority.toml
-```
-
 # Participating in the cothority
 
 There are different ways to participate in the cothority project. A first step
@@ -274,8 +223,6 @@ to set up a network on a machine and only let it be accessed locally.
 server, a special app that includes all services and protocols.
 - [How to run a conode](conode/Operating.md)
 gives an overview of the environment where a conode can be run
-- [DEDIS-cothority](doc/Join.md)
-explains how to join the DEDIS-cothority
 
 ## Contributing
 
@@ -290,16 +237,12 @@ everything goes smoothly. And we'd like to have good code-coverage.
 The software in this repository is put under a dual-licensing scheme: In general
 all of the provided code is open source via [GNU/AGPL
 3.0](https://www.gnu.org/licenses/agpl-3.0.en.html), please see the
-[LICENSE](LICENSE.AGPL) file for more details. If you would like to
-use Cothority in a way not allowed by the applicable license, please [contact
-us](mailto:dedis@epfl.ch) to inquire about conditions to get a commercial license.
+[LICENSE](LICENSE.AGPL) file for more details. 
 
 ## Contact
 
 We are always happy to hear about your experiences with the cothority project.
-Feel free to contact us on our
-[mailing list](https://groups.google.com/forum/#!forum/cothority) or by
-[email](mailto:dedis@epfl.ch).
+Feel free to contact us on our [email](mailto:calctopian@calctopia.com).
 
 ## Reporting security problems
 
@@ -309,15 +252,4 @@ security-critical applications. If you integrate Cothority into your application
 is YOUR RESPONSIBILITY to arrange for that audit.
 
 If you notice a possible security problem, please report it
-to dedis-security@epfl.ch.
-
-# Who is using our code?
-
-This is a list of people outside of DEDIS who is using our codebase for research
-or applied projects. If you have an interesting project that you would like to
-have listed here, please contact us at [dedis@epfl.ch](mailto:dedis@epfl.ch).
-
-- [Unlynx](https://github.com/lca1/unlynx) - A decentralized privacy-preserving data sharing tool
-- [Medco](https://github.com/lca1/medco) - Privacy preserving medical data sharing
-- [ByzGen](http://byzgen.com/) - Tracking and secure storage of digital and hard assets
-- [PDCi2b2](https://github.com/JLRgithub/PDCi2b2) - Private Data Characterization for [i2b2](https://www.i2b2.org/)
+to calctopian@calctopia.com
