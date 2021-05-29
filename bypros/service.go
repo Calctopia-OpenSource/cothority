@@ -37,6 +37,11 @@ type Service struct {
 	following  bool
 	stopFollow chan struct{}
 
+	// normalUnfollow is set when the Unfollow method is called so we can check,
+	// when the websocket connection closes, if it's normal or not.
+	normalUnfollow chan struct{}
+	followReq      *Follow
+
 	storage storage.Storage
 
 	// the proxy should only use one skipchain. We keep track of it there.
@@ -84,7 +89,7 @@ func getWsAddr(si *network.ServerIdentity) (string, error) {
 		protocol = "ws"
 	}
 
-	return fmt.Sprintf("%s://%s", protocol, url.Host), nil
+	return fmt.Sprintf("%s://%s%s", protocol, url.Host, url.Path), nil
 }
 
 func getClientAddr(si *network.ServerIdentity) (*url.URL, error) {
