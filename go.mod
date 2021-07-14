@@ -26,6 +26,7 @@ require (
 	github.com/go-asn1-ber/asn1-ber v1.4.1 // indirect
 	github.com/go-ldap/ldap/v3 v3.1.7
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect

@@ -1,0 +1,13 @@
+syntax = "proto2";
+package zkPOI;
+import "network.proto";
+
+option java_package = "ch.epfl.dedis.lib.proto";
+option java_outer_classname = "zkPOIProto";
+
+// NewPublicKey used for setting autentification
+message NewPublicKey {
+  repeated network.ServerIdentityStringified publics = 1;
+  required bytes sig = 2;
+  required string byzcoinid = 3;
+}

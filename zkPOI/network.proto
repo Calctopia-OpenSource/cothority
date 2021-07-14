@@ -1,0 +1,39 @@
+syntax = "proto2";
+
+package network;
+
+// This package should come from onet/network but is manually created here.
+// MANUAL
+
+option java_package = "ch.epfl.dedis.lib.proto";
+option java_outer_classname = "NetworkProto";
+
+message ServerIdentity {
+    required bytes public = 1;
+    repeated ServiceIdentity serviceIdentities = 2;
+    required bytes id = 3;
+    required string address = 4;
+    required string description = 5;
+    optional string url = 6;
+}
+
+message ServiceIdentity {
+    required string name = 1;
+    required string suite = 2;
+    required bytes public = 3;
+}
+
+message ServerIdentityStringified {
+    required bytes public = 1;
+    repeated ServiceIdentityStringified serviceIdentities = 2;
+    required bytes id = 3;
+    required string address = 4;
+    required string description = 5;
+    optional string url = 6;
+}
+
+message ServiceIdentityStringified {
+    required string name = 1;
+    required string suite = 2;
+    required bytes public = 3;
+}
