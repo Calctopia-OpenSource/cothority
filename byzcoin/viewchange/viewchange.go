@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"context"
+	"encoding/hex"
+	"math/big"
 
 	"go.dedis.ch/cothority/v3/blscosi/protocol"
 
@@ -28,7 +31,19 @@ import (
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
+
+		"github.com/drand/drand/client"
+	"github.com/drand/drand/client/http"
 )
+
+var urlsDrand = []string{
+	"https://api.drand.sh", "https://api2.drand.sh", "https://api3.drand.sh", "https://drand.cloudflare.com",
+}
+var chainHash, _ = hex.DecodeString("8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce")
+//var DRandClient, _ = client.New(
+//                      client.From(http.ForURLs(urlsDrand, chainHash)...),
+//                      client.WithChainHash(chainHash),)
+var DRandClient client.Client
 
 // maxTimeout is an upper bound for the view change timeout as it is increasing
 // exponentially.
@@ -357,6 +372,8 @@ func (req *InitReq) Sign(sk kyber.Scalar) error {
 type NewViewReq struct {
 	Roster onet.Roster
 	Proof  []InitReq
+	Time   time.Time
+	Round  uint64
 }
 
 // NewNewViewReq creates a new view request given the current roster and a
@@ -364,10 +381,16 @@ type NewViewReq struct {
 // It verifies that all proofs are unique,
 // point to the same view, and that the signatures are correct.
 func NewNewViewReq(old *onet.Roster, proofs []InitReq) (*NewViewReq, error) {
-	newRoster := rotateRoster(old, proofs[0].View.LeaderIndex)
+	//newRoster := rotateRoster(old, proofs[0].View.LeaderIndex)
+	newRoster, tm, round, err := rotateRosterRandomly(old)
+	if err != nil {
+		return nil, err
+	}
 	nvr := &NewViewReq{
 		Roster: *newRoster,
 		Proof:  proofs,
+		Time: tm,
+		Round: round,
 	}
 	if err := nvr.VerifySignatures(old); err != nil {
 		return nil, err
@@ -440,6 +463,43 @@ func (req NewViewReq) Verify(sb *skipchain.SkipBlock) error {
 	return req.VerifySignatures(sb.Roster)
 }
 
+// Verify that the view request is correct.
+// The skipblock passed must be the latest skipblock available.
+func (req NewViewReq) VerifyRandom(sb *skipchain.SkipBlock, timestamp int64) error {
+	log.Lvl1("USES DRAND!")
+	if !sb.Hash.Equal(req.GetView().ID) {
+		return errors.New("wrong block id")
+	}
+
+	// Check that we know about the view and the new roster in the request
+	// matches the view-change proofs.
+	// newRoster := rotateRoster(sb.Roster, req.GetView().LeaderIndex)
+	newRoster, err := rotateRosterRandomVerification(sb.Roster, req.Time, timestamp, req.Round)
+	if err != nil {
+		return fmt.Errorf("couldn't rotate roster for verification: %v", err)
+	}
+	equal, err := newRoster.Equal(&req.Roster)
+	if err != nil {
+		return fmt.Errorf("while comparing rosters: %v", err)
+	}
+	if !equal {
+		return errors.New("invalid roster in request")
+	}
+
+	if err := req.VerifyUniqueness(); err != nil {
+		return fmt.Errorf("proofs are not unique: %v", err)
+	}
+	threshold := protocol.DefaultThreshold(len(sb.Roster.List))
+	uniqueSigners := len(req.Proof)
+	if uniqueSigners < threshold {
+		return fmt.Errorf("not enough proofs: %d < %d", uniqueSigners,
+			threshold)
+	}
+
+	defer log.Lvl2("view-change verification OK")
+	return req.VerifySignatures(sb.Roster)
+}
+
 // VerifyUniqueness makes sure that all requests are unique and point to the
 // same view.
 func (req NewViewReq) VerifyUniqueness() error {
@@ -480,6 +540,76 @@ func rotateRoster(roster *onet.Roster, i int) *onet.Roster {
 	i = i % len(roster.List)
 
 	return onet.NewRoster(append(roster.List[i:], roster.List[:i]...))
+}
+
+// Simplified implementation of Rotating Leader
+// See: https://eprint.iacr.org/2019/676.pdf (IV.D)
+func rotateRosterRandomly(roster *onet.Roster) (*onet.Roster, time.Time, uint64, error) {
+	log.Lvl1("USES DRAND!")
+	if DRandClient == nil {
+		var err error
+		DRandClient, err = client.New(
+			client.From(http.ForURLs(urlsDrand, chainHash)...),
+			client.WithChainHash(chainHash),
+		)
+		if err != nil {
+			return nil, time.Now(), 0, fmt.Errorf("error connecting to drand: %v", err)
+		}
+	}
+
+	t := time.Now()
+	round := DRandClient.RoundAt(t)
+
+	r, err := DRandClient.Get(context.Background(), round)
+	if err != nil {
+		return nil, time.Now(), 0, fmt.Errorf("error getting from drand: %v", err)
+	}
+
+	i := new(big.Int)
+	i.SetBytes(r.Randomness())
+	lengthRoster := big.NewInt((int64) (len(roster.List)))
+	mod := i.Mod(i, lengthRoster)
+
+	return onet.NewRoster(append(roster.List[mod.Uint64():], roster.List[:mod.Uint64()]...)), t, round, nil
+}
+
+// Simplified implementation of Rotating Leader
+// See: https://eprint.iacr.org/2019/676.pdf (IV.D)
+func rotateRosterRandomVerification(roster *onet.Roster, timeRound time.Time, sbTimestamp int64, roundBlock uint64) (*onet.Roster, error) {
+	log.Lvl1("USES DRAND!")
+	if DRandClient == nil {
+		var err error
+		DRandClient, err = client.New(
+			client.From(http.ForURLs(urlsDrand, chainHash)...),
+			client.WithChainHash(chainHash),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error connecting to drand: %v", err)
+		}
+	}
+
+	// check that the timestamp from the skipblock(trusted) is near the timeRound (untrusted)
+	if timeRound.Unix() - sbTimestamp > 5 {
+		return nil, fmt.Errorf("possible attack: time difference too big: %v", timeRound.Unix() - sbTimestamp)
+	}
+
+	// given a correct timeRound, obtain dRand's round and check that equal rounds are being used
+	roundDrand := DRandClient.RoundAt(timeRound)
+	if roundDrand != roundBlock {
+		return nil, fmt.Errorf("obtained different rounds")
+	}
+
+	r, err := DRandClient.Get(context.Background(), roundDrand)
+	if err != nil {
+		return nil, fmt.Errorf("error getting from drand: %v", err)
+	}
+
+	i := new(big.Int)
+	i.SetBytes(r.Randomness())
+	lengthRoster := big.NewInt((int64) (len(roster.List)))
+	mod := i.Mod(i, lengthRoster)
+
+	return onet.NewRoster(append(roster.List[mod.Uint64():], roster.List[:mod.Uint64()]...)), nil
 }
 
 type state int

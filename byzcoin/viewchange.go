@@ -492,7 +492,9 @@ func (s *Service) createViewChangeBlock(req viewchange.NewViewReq, multisig []by
 		return xerrors.Errorf("signing tx: %v", err)
 	}
 
-	_, err = s.createNewBlock(req.GetGen(), rotateRoster(sb.Roster, req.GetView().LeaderIndex), []TxResult{{ctx, false}})
+        // do not recalculate the random roster two times with rotateRoster(), just generate new roster object
+	//_, err = s.createNewBlock(req.GetGen(), rotateRoster(sb.Roster, req.GetView().LeaderIndex), []TxResult{{ctx, false}})
+        _, err = s.createNewBlock(req.GetGen(), onet.NewRoster(req.Roster.List), []TxResult{{ctx, false}})
 	return cothority.ErrorOrNil(err, "creating block")
 }
 

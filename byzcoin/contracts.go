@@ -565,7 +565,12 @@ func (c *contractConfig) Invoke(rst ReadOnlyStateTrie, inst Instruction, coins [
 				return nil, nil,
 					fmt.Errorf("couldn't get latest skipblock: %v", err)
 			}
-			err = req.Verify(sb)
+			header, err := decodeBlockHeader(sb)
+			if err != nil {
+				return nil, nil, fmt.Errorf("couldn't unmarshal header: %v", err)
+			}
+			//err = req.Verify(sb)
+			err = req.VerifyRandom(sb, header.Timestamp)
 			if err != nil {
 				return nil, nil,
 					fmt.Errorf("verification of requests failed: %v", err)

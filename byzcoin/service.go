@@ -1125,6 +1125,32 @@ func (s *Service) createNewBlock(scID skipchain.SkipBlockID, r *onet.Roster, tx 
 		}
 
 		version = header.Version
+
+		// list current transactions for this block
+		var containBlockReward = false
+		for _, ctx := range tx {
+			for _, inst := range ctx.ClientTransaction.Instructions {
+				if inst.GetType() == InvokeType {
+					if inst.Invoke.Args.Search("rewardTx") != nil {
+						if coinsBuf := inst.Invoke.Args.Search("coins"); coinsBuf != nil {
+							if binary.LittleEndian.Uint64(coinsBuf) == 20 {
+								containBlockReward = true
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// reward for block creation (when it's not being already included now)
+		if !containBlockReward {
+			roSC := newROSkipChain(s.skService(), scID)
+			gs := globalState{st, roSC, nil}
+			err = s.rewardTx(gs, CreateBlockRewardTx)
+			if err != nil {
+				return nil, xerrors.Errorf("creating reward for block creation: %v", err)
+			}
+		}
 	}
 
 	// Create header of skipblock containing only hashes
@@ -2538,10 +2564,48 @@ func (s *Service) executeInstruction(gs GlobalState, cin []Coin,
 	switch instr.GetType() {
 	case SpawnType:
 		scs, cout, err = c.Spawn(gs, instr, cin)
+		if contractID == "bevm" {
+			err = s.rewardTx(gs, SpawnBEVMRewardTx)
+			if err != nil {
+				return
+			}
+		} else {
+			err = s.rewardTx(gs, SpawnContractRewardTx)
+			if err != nil {
+				return
+			}
+		}
 	case InvokeType:
 		scs, cout, err = c.Invoke(gs, instr, cin)
+		if contractID == "bevm" {
+			err = s.rewardTx(gs, InvokeBEVMRewardTx)
+			if err != nil {
+				return
+			}
+		} else {
+			// filter to prevent rewardTxs generating yet more rewardTxs
+			if !(instr.Invoke.ContractID == "coin" &&
+				instr.Invoke.Command == "mint" &&
+				instr.Invoke.Args.Search("rewardTx") != nil) {
+					err = s.rewardTx(gs, InvokeContractRewardTx)
+					if err != nil {
+						return
+					}
+			}
+		}
 	case DeleteType:
 		scs, cout, err = c.Delete(gs, instr, cin)
+		if contractID == "bevm" {
+			err = s.rewardTx(gs, DeleteBEVMRewardTx)
+			if err != nil {
+				return
+			}
+		} else {
+			err = s.rewardTx(gs, DeleteContractRewardTx)
+			if err != nil {
+				return
+			}
+		}
 	default:
 		return nil, nil, xerrors.New("unexpected contract type")
 	}
@@ -2583,6 +2647,109 @@ func (s *Service) executeInstruction(gs GlobalState, cin []Coin,
 	return
 }
 
+type rewardFunction func(serverIdentity *network.ServerIdentity, signerCounter uint64) (ClientTransaction, error)
+
+func (s *Service) rewardTx(gs GlobalState, rewardFn rewardFunction) (err error) {
+	log.Lvl1("rewardTx(", s.ServerIdentity().Public ,"): ", len(s.darcToSc))
+
+	if len(s.darcToSc) < 1 { // byzcoin not yet created
+		return
+	}
+
+	// Has this server a coin instance?
+	pubBuf, err := hex.DecodeString(s.ServerIdentity().Public.String())
+	h := sha256.New()
+	h.Write([]byte("coin"))
+	h.Write(pubBuf)
+	serverAccount := NewInstanceID(h.Sum(nil))
+
+	p, err1 := gs.(ReadOnlyStateTrie).GetProof(serverAccount.Slice())
+	if err1 != nil { // no coin instance created for this account
+		return
+	}
+	ok, err1 := p.Exists(serverAccount.Slice())
+	if err1 != nil || ok != true { // no coin instance created for this account
+		return
+	}
+
+	log.Lvl1("COIN-INSTANCE FOR: ", s.ServerIdentity().Public)
+	// get signerCounters for serverIdentity
+	signerCounter, err := getSignerCounter(gs.(ReadOnlyStateTrie), "ed25519:"+s.ServerIdentity().Public.String())
+	if err != nil {
+		err = xerrors.Errorf("reading counter: %v", err)
+		return
+	}
+
+	rewardTx, err2 := rewardFn(s.ServerIdentity(), signerCounter)
+	if err2 != nil {
+		err = xerrors.Errorf("generating reward: %v", err2)
+		return
+	}
+	latest, err3 := gs.(ReadOnlySkipChain).GetLatest()
+	if err3 != nil {
+		err = xerrors.Errorf("getting skipchainID: %v", err3)
+		return
+	}
+/*
+	adtresp, _ := s.AddTransaction(&AddTxRequest{
+		Version:       CurrentVersion,
+		SkipchainID:   latest.SkipChainID(),
+		Transaction:   rewardTx,
+		InclusionWait: 10,
+	})
+*/
+
+	skipchainID := latest.SkipChainID()
+	leader, err5 := s.getLeader(skipchainID)
+	if err5 != nil {
+		err = xerrors.Errorf("Error getting the leader: %v", err5)
+		return
+	}
+/*
+	leaderRoster := onet.NewRoster([]*network.ServerIdentity{leader})
+	_, err4 := NewClient(skipchainID, *leaderRoster).AddTransaction(rewardTx)
+	if err4 != nil {
+		err = xerrors.Errorf("adding reward transaction: %v", err4)
+		return
+	}
+*/
+
+	//only the leader gets to introduce the reward transaction
+
+	if s.ServerIdentity().Equal(leader) {
+		alreadyIncluded := false
+		txh := rewardTx.Instructions.Hash()
+		for _, txHash := range txPlainHashes {
+			if bytes.Equal(txHash, txh) {
+				alreadyIncluded = true
+			}
+		}
+
+		if !alreadyIncluded {
+			log.Lvl1("Adding reward transaction on: ", s.ServerIdentity(), " with skipchainID ", skipchainID, " with signerCounter: ", signerCounter, " and hash ", rewardTx.Instructions.Hash(), " and with signature: ", rewardTx.Instructions.HashWithSignatures())
+			s.txPipelinesMutex.Lock()
+			txp, ok := s.txPipeline[string(skipchainID)]
+			if !ok {
+				s.txPipelinesMutex.Unlock()
+				err = xerrors.New("this pipeline is not available")
+				return
+			}
+			txp.ctxChan <- rewardTx
+			s.txPipelinesMutex.Unlock()
+		} else {
+			log.Lvl1("NOT Adding reward transaction on: ", s.ServerIdentity(), " with skipchainID ", skipchainID, " with signerCounter: ", signerCounter, " and hash ", rewardTx.Instructions.Hash(), " and with signature: ", rewardTx.Instructions.HashWithSignatures())
+		}
+	}
+/*
+	if adtresp.Error != "" {
+		err = xerrors.Errorf("adding reward transaction (response): %v", adtresp.Error)
+		return
+	}
+*/
+
+	return
+}
+
 func (s *Service) getLeader(scID skipchain.SkipBlockID) (*network.ServerIdentity, error) {
 	scConfig, err := s.LoadConfig(scID)
 	if err != nil {
@@ -2611,6 +2778,15 @@ func loadNonceFromTxs(txs TxResults) ([]byte, error) {
 		return nil, xerrors.New("nonce is empty")
 	}
 	return nonce, nil
+}
+
+func (s *Service) TestCloseDrand() {
+	if viewchange.DRandClient != nil {
+		err := viewchange.DRandClient.Close()
+		if err != nil {
+			log.Lvl1("Error closing drand: ", err)
+		}
+	}
 }
 
 // TestClose closes the go-routines that are polling for transactions. It is

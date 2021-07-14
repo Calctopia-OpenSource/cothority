@@ -20,15 +20,14 @@ require (
 	github.com/docker/docker v20.10.5+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0 // indirect
+	github.com/drand/drand v1.1.1
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
 	github.com/ethereum/go-ethereum v1.8.27
 	github.com/go-asn1-ber/asn1-ber v1.4.1 // indirect
 	github.com/go-ldap/ldap/v3 v3.1.7
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
-	github.com/golang/protobuf v1.3.5 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2
-	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/lib/pq v1.10.0 // indirect
@@ -49,8 +48,6 @@ require (
 	go.dedis.ch/onet/v3 v3.2.9
 	go.dedis.ch/protobuf v1.0.11
 	go.etcd.io/bbolt v1.3.4
-	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37 // indirect
-	golang.org/x/net v0.0.0-20200319234117-63522dbf7eec // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sys v0.0.0-20200831180312-196b9ba8737a
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543

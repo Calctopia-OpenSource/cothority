@@ -649,8 +649,15 @@ func mint(c *cli.Context) error {
 		pubI := darc.NewIdentityEd25519(pub)
 		rules := darc.NewRules()
 
-		err = rules.AddRule(darc.Action("spawn:coin"),
-			expression.Expr(signer.Identity().String()))
+		identities := make([]string, 2)
+		identities[0] = signer.Identity().String()
+		identities[1] = pubI.String()
+		groupExpr := expression.InitOrExpr(identities...)
+
+		//err = rules.AddRule(darc.Action("spawn:coin"),
+		//	expression.Expr(signer.Identity().String()))
+		err = rules.AddRule(darc.Action("invoke:coin.mint"), groupExpr)
+
 		if err != nil {
 			return err
 		}

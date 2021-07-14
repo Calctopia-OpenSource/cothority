@@ -45,6 +45,9 @@ func newTxPipeline(s *Service, latest *skipchain.SkipBlock) *txPipeline {
 	}
 }
 
+// list of txHashes without signatures
+var txPlainHashes [][]byte
+
 // start listens for new ClientTransactions and queues them up.
 // It also listens for update requests and puts them in the queue.
 // If a block is pending for approval,
@@ -100,8 +103,10 @@ leaderLoop:
 				}
 			}
 			txHashes = append(txHashes, txh)
+			txPlainHashes = append(txPlainHashes, tx.Instructions.Hash())
 			if len(txHashes) > maxTxHashes {
 				txHashes = txHashes[len(txHashes)-maxTxHashes:]
+				txPlainHashes = txPlainHashes[len(txPlainHashes)-maxTxHashes:]
 			}
 
 			p.txQueue = append(p.txQueue, tx)

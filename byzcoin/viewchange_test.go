@@ -20,7 +20,7 @@ import (
 // containing that transaction. The new transaction should be stored on all
 // followers. Finally, we bring the failed nodes back up and they should
 // contain the transactions that they missed.
-func TestViewChange_Basic(t *testing.T) {
+func TestViewChange_Basic1(t *testing.T) {
 	testViewChange(t, 4, 1)
 }
 
@@ -50,15 +50,18 @@ func TestViewChange_Basic3(t *testing.T) {
 //     - the time to wait to propagate to children
 // So it's using the `SetPropagationTimeout` to tweak it a bit.
 func testViewChange(t *testing.T, nHosts, nFailures int) {
+	log.AddUserUninterestingGoroutine("(*pollDesc).waitRead")
 	bArgs := defaultBCTArgs
 	bArgs.Nodes = nHosts
 	bArgs.RotationWindow = 3
 	// Give some more time on Travis to do the verifications
-	bArgs.PropagationInterval = 2 * bArgs.PropagationInterval
+	// with drand, propagationInterval is longer
+	bArgs.PropagationInterval = 4 * bArgs.PropagationInterval
 	b := newBCTRun(t, &bArgs)
 	defer b.CloseAll()
 
-	propTimeout := time.Duration(4) * b.PropagationInterval
+	// with drand, propTimeout is longer
+	propTimeout := time.Duration(8) * b.PropagationInterval
 
 	// The propagation interval needs to be high enough so that the
 	// sub-leaders and the leaves have the time to make sure the
@@ -67,6 +70,7 @@ func testViewChange(t *testing.T, nHosts, nFailures int) {
 		service.SetPropagationTimeout(propTimeout)
 	}
 
+	//b.Services[0].TestCloseDrand()
 	// Stop the first nFailures hosts then the node at index nFailures
 	// should take over.
 	for i := 0; i < nFailures; i++ {
@@ -89,8 +93,10 @@ func testViewChange(t *testing.T, nHosts, nFailures int) {
 	sameRoster, err := newRoster.Equal(b.Roster)
 	require.NoError(t, err)
 	require.False(t, sameRoster)
-	require.True(t, newRoster.List[0].Equal(
-		b.Services[nFailures].ServerIdentity()))
+	//require.True(t, newRoster.List[0].Equal(
+	//	b.Services[nFailures].ServerIdentity()))
+
+	log.Lvl1("NEW LEADER (ROSTER): ", newRoster.List[0])
 
 	// try to send a transaction to the node on index nFailures+1, which is
 	// a follower (not the new leader)
@@ -107,7 +113,7 @@ func testViewChange(t *testing.T, nHosts, nFailures int) {
 		leader, err := service.getLeader(b.Genesis.SkipChainID())
 		require.NoError(t, err)
 		require.NotNil(t, leader)
-		require.True(t, leader.Equal(b.Services[nFailures].ServerIdentity()), fmt.Sprintf("%v", leader))
+		require.True(t, leader.Equal(newRoster.List[0]), fmt.Sprintf("%v", leader))
 	}
 
 	log.Lvl1("Creating new TX")
@@ -132,10 +138,13 @@ func testViewChange(t *testing.T, nHosts, nFailures int) {
 	pr, err := b.Client.GetProof(b.GenesisDarc.GetBaseID())
 	require.NoError(t, err)
 	require.Equal(t, 6, pr.Proof.Latest.Index)
+
+	b.Services[0].TestCloseDrand()
 }
 
 // Tests that a view change can happen when the leader index is out of bound
 func TestViewChange_LeaderIndex(t *testing.T) {
+	log.AddUserUninterestingGoroutine("(*pollDesc).waitRead")
 	bArgs := defaultBCTArgs
 	bArgs.PropagationInterval = time.Second
 	bArgs.Nodes = 5
@@ -143,6 +152,7 @@ func TestViewChange_LeaderIndex(t *testing.T) {
 	b := newBCTRun(t, &bArgs)
 	defer b.CloseAll()
 
+	log.Lvl1("send first view change request")
 	err := b.Services[0].sendViewChangeReq(viewchange.View{LeaderIndex: -1})
 	require.Error(t, err)
 	require.Equal(t, "leader index must be positive", err.Error())
@@ -152,6 +162,7 @@ func TestViewChange_LeaderIndex(t *testing.T) {
 		Gen:         b.Genesis.SkipChainID(),
 		LeaderIndex: 7,
 	}
+	log.Lvl1("send view change requests to all nodes")
 	for i := 0; i < 5; i++ {
 		b.Services[i].viewChangeMan.addReq(viewchange.InitReq{
 			SignerID: b.Services[i].ServerIdentity().ID,
@@ -163,18 +174,24 @@ func TestViewChange_LeaderIndex(t *testing.T) {
 
 	time.Sleep(2 * b.PropagationInterval)
 
+	thirdNodeLeader, err := b.Services[0].getLeader(b.Genesis.SkipChainID())
+
+	log.Lvl1("test leaders")
 	for _, service := range b.Services {
 		// everyone should have the same leader after the genesis block is stored
 		leader, err := service.getLeader(b.Genesis.SkipChainID())
 		require.NoError(t, err)
 		require.NotNil(t, leader)
-		require.True(t, leader.Equal(b.Services[2].ServerIdentity()))
+		require.True(t, leader.Equal(thirdNodeLeader))
 	}
+
+        b.Services[0].TestCloseDrand()
 }
 
 // Test that old states of a view change that got stuck in the middle of the protocol
 // are correctly cleaned if a new block is discovered.
 func TestViewChange_LostSync(t *testing.T) {
+	log.AddUserUninterestingGoroutine("(*pollDesc).waitRead")
 	bArgs := defaultBCTArgs
 	bArgs.Nodes = 5
 	bArgs.PropagationInterval = time.Second
@@ -261,13 +278,18 @@ func TestViewChange_LostSync(t *testing.T) {
 
 	log.Lvl1("Waiting for the new block to be propagated")
 	b.Client.WaitPropagation(2)
+
+	fourthNodeLeader, err := b.Services[3].getLeader(b.Genesis.SkipChainID())
+
 	for _, service := range b.Services {
 		// everyone should have the same leader after the genesis block is stored
 		leader, err := service.getLeader(b.Genesis.SkipChainID())
 		require.NoError(t, err)
 		require.NotNil(t, leader)
-		require.True(t, leader.Equal(b.Services[3].ServerIdentity()))
+		require.True(t, leader.Equal(fourthNodeLeader))
 	}
+
+	b.Services[0].TestCloseDrand()
 }
 
 // Test to make sure the view change triggers a proof propagation when a conode
@@ -276,15 +298,19 @@ func TestViewChange_LostSync(t *testing.T) {
 //  - Node0 - leader - stopped after creation of block #1
 //  - Node3 - misses block #1, unpaused after creation of block #1
 func TestViewChange_NeedCatchUp(t *testing.T) {
+	log.AddUserUninterestingGoroutine("(*pollDesc).waitRead")
 	nodes := 4
 	bArgs := defaultBCTArgs
 	bArgs.Nodes = nodes
 	bArgs.RotationWindow = 3
+	// with drand, propagationInterval is longer
+	bArgs.PropagationInterval = 3 * bArgs.PropagationInterval
 	b := newBCTRun(t, &bArgs)
 	defer b.CloseAll()
 
 	for _, service := range b.Services {
-		service.SetPropagationTimeout(2 * b.PropagationInterval)
+		// with drand, propagationTimeout is longer
+		service.SetPropagationTimeout(3 * b.PropagationInterval)
 	}
 
 	b.Services[nodes-1].TestClose()
@@ -312,9 +338,13 @@ func TestViewChange_NeedCatchUp(t *testing.T) {
 	log.Lvl1("Sending block again")
 	b.SpawnDummy(&txArgs)
 
+	firstNodeLeader, err := b.Services[0].getLeader(b.Genesis.SkipChainID())
+
 	// Check that a view change was finally executed
 	leader, err := b.Services[nodes-1].getLeader(b.Genesis.SkipChainID())
 	require.NoError(t, err)
 	require.NotNil(t, leader)
-	require.False(t, leader.Equal(b.Services[0].ServerIdentity()))
+	require.False(t, leader.Equal(firstNodeLeader))
+
+	b.Services[0].TestCloseDrand()
 }
