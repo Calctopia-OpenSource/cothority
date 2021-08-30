@@ -98,6 +98,16 @@ func DefaultThreshold(n int) int {
 	return n - DefaultFaultyThreshold(n)
 }
 
+// DefaultSubLeaders returns the number of sub-leaders, which is the
+// cube-root of the number of nodes.
+func DefaultSubLeaders(nodes int) int {
+	// As `math.Pow` calculates `8 ** (1/3) < 2`,
+	// we add 0.0001 for the rounding error.
+	// This works for up to 57 ** 3 = 185'193, which should be enough
+	// nodes.
+	return int(math.Pow(float64(nodes), 1.0/3.0) + 0.0001)
+}
+
 // NewBlsCosi method is used to define the blscosi protocol.
 func NewBlsCosi(n *onet.TreeNodeInstance, vf VerificationFn, subProtocolName string, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	nNodes := len(n.Roster().List)
@@ -173,8 +183,8 @@ func (p *BlsCosi) Start() error {
 	}
 
 	if p.subTrees == nil {
-		// the default number of subtree is the square root to
-		// distribute the nodes evenly
+		// the default number of subtrees is the square root of the number of
+		// nodes to distribute the nodes evenly
 		if err := p.SetNbrSubTree(int(math.Sqrt(float64(len(p.Roster().
 			List))))); err != nil {
 			p.Done()
@@ -409,7 +419,8 @@ func (p *BlsCosi) collectSignatures() (ResponseMap, error) {
 	}
 
 	if p.checkFailureThreshold(numFailure) {
-		return nil, fmt.Errorf("too many refusals (got %d), the threshold of %d cannot be achieved",
+		return nil, fmt.Errorf("too many signature-refusals (got %d), "+
+			"the threshold of %d cannot be achieved",
 			numFailure, p.Threshold)
 	}
 
