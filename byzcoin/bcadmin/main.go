@@ -110,7 +110,9 @@ func create(c *cli.Context) error {
 	owner := darc.NewSignerEd25519(nil, nil)
 
 	req, err := byzcoin.DefaultGenesisMsg(byzcoin.CurrentVersion, r,
-		[]string{"spawn:longTermSecret"}, owner.Identity())
+		[]string{"spawn:longTermSecret", "spawn:coin", "invoke:coin.mint",
+			"invoke:coin.transfer", "spawn:spawner", "spawn:credential"},
+		owner.Identity())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -1730,14 +1732,33 @@ func getInfo(c *cli.Context) error {
 		return xerrors.New("--bc flag is required")
 	}
 
-	cfg, _, err := lib.LoadConfig(bcArg)
+	cfg, cl, err := lib.LoadConfig(bcArg)
 	if err != nil {
 		return err
 	}
 
+	log.Info("Fetching the latest config")
+	cl.UpdateNodes()
+	var bcCfg byzcoin.ChainConfig
+	if _, err := cl.GetInstance(byzcoin.ConfigInstanceID,
+		byzcoin.ContractConfigID, &bcCfg); err != nil {
+		return xerrors.Errorf("couldn't get chain config: %v", err)
+	}
 	log.Infof("%s\n"+
-		"- BC: %s\n",
-		cfg.String(), bcArg)
+		"- BC: %s\n"+
+		"%v",
+		cfg.String(), bcArg, bcCfg)
+
+	if c.Bool("roster") {
+		group := app.Group{
+			Roster: &bcCfg.Roster,
+		}
+		groupToml, err := group.Toml(cothority.Suite)
+		if err != nil {
+			return xerrors.Errorf("couldn't create toml: %v", err)
+		}
+		log.Infof("Full roster is:\n%s", groupToml.String())
+	}
 
 	return nil
 }
