@@ -80,6 +80,7 @@ func (c *contractCoin) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruc
 	} else {
 		c.Name = CoinName
 	}
+	c.Coin.Active = true
 	var ciBuf []byte
 	ciBuf, err = protobuf.Encode(&c.Coin)
 	if err != nil {
@@ -102,7 +103,7 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 
 	// Invoke is one of "mint", "transfer", "fetch", or "store".
 	var coinsArg uint64
-	if inst.Invoke.Command != "store" {
+	if inst.Invoke.Command != "store" || inst.Invoke.Command != "toggleActive" {
 		coinsBuf := inst.Invoke.Args.Search("coins")
 		if coinsBuf == nil {
 			err = xerrors.New("argument \"coins\" is missing")
@@ -117,6 +118,7 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 
 	switch inst.Invoke.Command {
 	case "mint":
+		if !c.Coin.Active { return }
 		// mint simply adds this amount of coins to the account.
 		log.Lvl2("minting", coinsArg)
 		err = c.SafeAdd(coinsArg)
@@ -124,6 +126,7 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 			return
 		}
 	case "transfer":
+		if !c.Coin.Active { return }
 		// transfer sends a given amount of coins to another account.
 		target := inst.Invoke.Args.Search("destination")
 		var (
@@ -164,6 +167,7 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 		sc = append(sc, byzcoin.NewStateChange(byzcoin.Update, byzcoin.NewInstanceID(target),
 			ContractCoinID, targetBuf, did))
 	case "fetch":
+		if !c.Coin.Active { return }
 		// fetch removes coins from the account and passes it on to the next
 		// instruction.
 		err = c.SafeSub(coinsArg)
@@ -173,6 +177,7 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 		}
 		cout = append(cout, byzcoin.Coin{Name: c.Name, Value: coinsArg})
 	case "store":
+		if !c.Coin.Active { return }
 		// store moves all coins from this instruction into the account.
 		cout = []byzcoin.Coin{}
 		for _, co := range coins {
@@ -185,6 +190,10 @@ func (c *contractCoin) Invoke(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instru
 				cout = append(cout, co)
 			}
 		}
+	case "toggleActive":
+		// toggle active state of the coin
+		log.Lvl2("toggling state of coin")
+		c.Coin.Active = !c.Coin.Active
 	default:
 		err = xerrors.New("coin contract can only mine and transfer")
 		return

@@ -27,9 +27,13 @@ proto:
 	./proto.sh
 	make -C external
 
+# NOTE: Only works with libssl1.0-dev
+ICAO_static_lib:
+	bash -c "cd byzcoin/ICAO; gcc -c *.c -I .; ar rs ../ICAO.a *.o; rm *.o;"
+
 docker:
 	docker run -t -v $(PWD):/cothority golang:1.15-buster \
-		bash -c "cd /cothority; go build -o external/docker/conode -tags test ./conode"
+		bash -c "cd /cothority; go build -o external/docker/conode --tags "json1" -tags test ./conode"
 	cp conode/run_nodes.sh external/docker
 	docker build -t $(TEST_IMAGE_NAME) external/docker
 

@@ -126,6 +126,45 @@ type AddTxResponse struct {
 	Proof *Proof `protobuf:"opt"`
 }
 
+// AddSigningRequest requests to apply a new signature to a transaction.
+type AddSigningRequest struct {
+        // Version of the protocol
+        Version Version
+        // SkipchainID is the hash of the first skipblock
+        SkipchainID skipchain.SkipBlockID
+        // Transaction to be signed
+        Transaction ClientTransaction
+        // How many block-intervals to wait for inclusion -
+        // missing value or 0 means return immediately.
+        InclusionWait int `protobuf:"opt"`
+        // ProofFrom is used to ask a proof from a given block. If this field
+        // is empty, the proof will start from the genesis block. The proof is
+        // returned only when InclusionWait is above 0.
+        ProofFrom skipchain.SkipBlockID `protobuf:"opt"`
+        // Flags can hold additional flags to pass to the endpoint.
+        // Current flags supported are:
+        //  - 1: leader check - don't propagate further
+        Flags int `protobuf:"opt"`
+        // SOD file from passport/ID document
+        SOD []byte
+        // DG1 file from passport/ID document
+        DG1 []byte
+        // DG11 file from passport/ID document
+        DG11 []byte
+}
+
+// AddSigningResponse is the reply after an AddSigningRequest is finished.
+type AddSigningResponse struct {
+        // Version of the protocol
+        Version Version
+        // Signed transaction
+        Transaction ClientTransaction
+        // Error message describes why the transaction failed.
+        Error string `protobuf:"opt"`
+        // Proof of the block with the transaction.
+        Proof *Proof `protobuf:"opt"`
+}
+
 // GetProof returns the proof that the given key is in the trie.
 type GetProof struct {
 	// Version of the protocol
@@ -305,6 +344,8 @@ type Coin struct {
 	Name InstanceID
 	// Value is the total number of coins of that type.
 	Value uint64
+        // Determines whether the coin is active
+        Active bool
 }
 
 // StreamingRequest is a request asking the service to start streaming blocks

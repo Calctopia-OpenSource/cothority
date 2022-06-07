@@ -7,45 +7,11 @@ option java_outer_classname = "zkPOIProto";
 
 // NewPublicKey used for setting authentication
 message NewPublicKey {
-  repeated network.ServerIdentity //publics = 1;
-  repeated ServerIdentityStringified publics = 2;
-  required bytes sig = 3;
-  required string byzcoinid = 4;
+  repeated network.ServerIdentityStringified publics = 1;
+  required bytes sig = 2;
+  required string byzcoinid = 3;
 }
 
 // Why ServerIdentityStringified instead of network.ServerIdentity:
 //  dedis/protobuf is decoding all kyber.Points as ed25519, but ServiceIdentity should be decoded as bn256
 //  thus, we need to send ServiceIdentityStringified.Public as string instead of bytes to prevent wrong decoding as ed25519
-
-// ServerIdentity is used to represent a Server in the whole internet.
-// It's based on a public key, and there can be one or more addresses to contact it.
-message ServerIdentityStringified {
-  required This // = 1;
-  required bytes public = 2;
-  required This // = 3;
-  repeated ServiceIdentityStringified serviceidentities = 4;
-  required The // = 5;
-  required Deprecated: // = 6;
-  required network.ServerIdentityID id = 7;
-  required The // = 8;
-  required network.Address address = 9;
-  required Description // = 10;
-  required string description = 11;
-  required This // = 12;
-  required be // = 13;
-  required bytes private = 14;
-  required The // = 15;
-  optional string url = 16;
-}
-
-// ServerIdentityID uniquely identifies an ServerIdentity struct
-type ServerIdentityID uuid.UUID
-
-// ServiceIdentity contains the identity of a service which is its public and
-// private keys
-message ServiceIdentityStringified {
-  required string name = 1;
-  required string suite = 2;
-  required string public = 3;
-  required bytes private = 4;
-}

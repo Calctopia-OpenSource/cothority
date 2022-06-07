@@ -105,6 +105,45 @@ message AddTxResponse {
   optional Proof proof = 3;
 }
 
+// AddSigningRequest requests to apply a new signature to a transaction.
+message AddSigningRequest {
+  // Version of the protocol
+  required sint32 version = 1;
+  // SkipchainID is the hash of the first skipblock
+  required bytes skipchainid = 2;
+  // Transaction to be signed
+  required ClientTransaction transaction = 3;
+  // How many block-intervals to wait for inclusion -
+  // missing value or 0 means return immediately.
+  optional sint32 inclusionwait = 4;
+  // ProofFrom is used to ask a proof from a given block. If this field
+  // is empty, the proof will start from the genesis block. The proof is
+  // returned only when InclusionWait is above 0.
+  optional bytes prooffrom = 5;
+  // Flags can hold additional flags to pass to the endpoint.
+  // Current flags supported are:
+  // - 1: leader check - don't propagate further
+  optional sint32 flags = 6;
+  // SOD file from passport/ID document
+  optional bytes SOD = 7;
+  // DG1 file from passport/ID document
+  optional bytes DG1 = 8;
+  // DG11 file from passport/ID document
+  optional bytes DG11 = 9;
+}
+
+// AddSigningResponse is the reply after an AddSigningRequest is finished.
+message AddSigningResponse {
+  // Version of the protocol
+  required sint32 version = 1;
+  // Signed Transaction
+  required ClientTransaction transaction = 2;
+  // Error message describes why the transaction failed.
+  optional string error = 3;
+  // Proof of the block with the transaction.
+  optional Proof proof = 4;
+}
+
 // GetProof returns the proof that the given key is in the trie.
 message GetProof {
   // Version of the protocol

@@ -65,7 +65,7 @@ shift $((OPTIND-1))
 
 CONODE_BIN="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"/conode
 if [ ! -x $CONODE_BIN ]; then
-	echo "No conode executable found. Use \"go build\" to make it."
+	echo "No conode executable found. Use \"go build --tags \"json1\"\" to make it."
 	exit 1
 fi
 

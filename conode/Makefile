@@ -69,7 +69,11 @@ verify:
 # so that we can find the right one in the wrapper script.
 # This is in it's own rule because the Docker build needs it also.
 exe/conode.Linux.x86_64:
-	GO111MODULE=on GOOS=linux GOARCH=amd64 go build -ldflags="$(ldflags)" -o $@
+	GO111MODULE=on GOOS=linux GOARCH=amd64 go build --tags "json1" -ldflags="$(ldflags)" -o $@
+
+# NOTE: Only works with libssl1.0-dev
+ICAO_static_lib:
+	bash -c "cd byzcoin/ICAO; gcc -c *.c -I .; ar rs ../ICAO.a *.o; rm *.o;"
 
 builder:
 	@[ `uname` != Linux ] && echo "Release binary build server must be Linux." && exit 1 || true
@@ -78,9 +82,9 @@ bindist: builder clean verify exe/conode.Linux.x86_64
 	rm -rf $(OUTPUT_DIR)
 	mkdir $(OUTPUT_DIR)
 	cp exe/conode.Linux.x86_64 $(OUTPUT_DIR)
-	GO111MODULE=on GOOS=darwin GOARCH=amd64 go build -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.Darwin.x86_64
-	GO111MODULE=on GOOS=freebsd GOARCH=amd64 go build -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.FreeBSD.amd64
-	GO111MODULE=on GOOS=windows GOARCH=amd64 go build -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.exe
+	GO111MODULE=on GOOS=darwin GOARCH=amd64 go build --tags "json1" -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.Darwin.x86_64
+	GO111MODULE=on GOOS=freebsd GOARCH=amd64 go build --tags "json1" -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.FreeBSD.amd64
+	GO111MODULE=on GOOS=windows GOARCH=amd64 go build --tags "json1" -ldflags="$(ldflags)" -o $(OUTPUT_DIR)/conode.exe
 	echo "#!/bin/sh" > $(OUTPUT_DIR)/conode
 	echo "./conode.\`uname -s\`.\`uname -m\` \$$*" >> $(OUTPUT_DIR)/conode
 	chmod +x $(OUTPUT_DIR)/conode

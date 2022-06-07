@@ -14,6 +14,7 @@ func init() {
 		&GetAllByzCoinIDsRequest{}, &GetAllByzCoinIDsResponse{},
 		&CreateGenesisBlock{}, &CreateGenesisBlockResponse{},
 		&AddTxRequest{}, &AddTxResponse{},
+		&AddSigningRequest{}, &AddSigningResponse{},
 		&GetSignerCounters{}, &GetSignerCountersResponse{},
 	)
 }

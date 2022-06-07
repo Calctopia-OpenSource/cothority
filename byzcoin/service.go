@@ -14,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+        "os"
+        "database/sql"
+        "unsafe"
 
 	"github.com/satori/go.uuid"
 	"go.dedis.ch/cothority/v3"
@@ -26,13 +29,24 @@ import (
 	"go.dedis.ch/kyber/v3/sign/schnorr"
 	"go.dedis.ch/kyber/v3/suites"
 	"go.dedis.ch/kyber/v3/util/random"
+	"go.dedis.ch/kyber/v3/util/encoding"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
 	"go.dedis.ch/protobuf"
 	"go.etcd.io/bbolt"
 	"golang.org/x/xerrors"
+	"github.com/BurntSushi/toml"
+	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
 )
+
+// #cgo linux windows pkg-config: libssl libcrypto
+// #cgo CFLAGS: -I${SRCDIR}/ICAO
+// #cgo LDFLAGS: ${SRCDIR}/ICAO.a
+// #include <stdlib.h>
+// #include <icao.h>
+import "C"
 
 var pairingSuite = suites.MustFind("bn256.adapter").(*pairing.SuiteBn256)
 
@@ -72,6 +86,30 @@ var ByzCoinID onet.ServiceID
 
 // Verify is the verifier ID for ByzCoin skipchains.
 var Verify = skipchain.VerifierID(uuid.NewV5(uuid.NamespaceURL, "ByzCoin"))
+
+// Extended from definition in dedis/onet/app/config.go
+type CothorityConfig struct {
+        Suite                      string
+        Public                     string
+        Services                   map[string]ServiceConfig
+        Private                    string
+        Address                    network.Address
+        ListenAddress              string
+        Description                string
+        URL                        string
+        WebSocketTLSCertificate    CertificateURL
+        WebSocketTLSCertificateKey CertificateURL
+        // new fields
+        PrivateRegistration        string
+        SanctionsDBconnection      string
+        IdentitiesDBconnection     string
+}
+type CertificateURL string
+type ServiceConfig struct {
+        Suite   string
+        Public  string
+        Private string
+}
 
 func init() {
 	var err error
@@ -161,6 +199,17 @@ type Service struct {
 	// ByzCoin chains.
 	defaultVersion      Version
 	defaultVersionMutex sync.Mutex
+
+        // DBs
+        dbIdentities    *sql.DB
+        dbSanctions     *sql.DB
+
+        // DB statements
+        stmtInsertIdentity *sql.Stmt
+        stmtSearchID *sql.Stmt
+        stmtPassportRegistry *sql.Stmt
+        stmtPersonRegistry *sql.Stmt
+        stmtPEP *sql.Stmt
 }
 
 type downloadState struct {
@@ -541,6 +590,232 @@ func (s *Service) AddTransaction(req *AddTxRequest) (*AddTxResponse, error) {
 		}
 	}
 	return &AddTxResponse{Version: CurrentVersion}, nil
+}
+
+func (s *Service) SignTransaction(req *AddSigningRequest) (*AddSigningResponse, error) {
+        if !s.tasks.add(1) {
+                return nil, xerrors.New("node is closed")
+        }
+        defer s.tasks.done()
+
+        if len(req.Transaction.Instructions) == 0 {
+                return nil, xerrors.New("no transactions to add")
+        }
+
+        gen := s.db().GetByID(req.SkipchainID)
+        if gen == nil || gen.Index != 0 {
+                return nil, xerrors.New("skipchain ID does not exist")
+        }
+
+        latest, err := s.db().GetLatest(gen)
+        if err != nil {
+                if latest == nil {
+                        return nil, xerrors.Errorf("reading latest block: %w", err)
+                }
+                log.Warn("Got block, but with an error:", err)
+        }
+        if i, _ := latest.Roster.Search(s.ServerIdentity().ID); i < 0 {
+                return nil, xerrors.New("refusing to accept transaction for a chain we're not part of")
+        }
+
+        header, err := decodeBlockHeader(latest)
+        if err != nil {
+                return nil, xerrors.Errorf("decoding header: %w", err)
+        }
+
+        if req.Version < 2 && header.Version >= 2 {
+                // As the version 2 introduced a fix to the hash, the client must
+                // at least be above it when the chain is.
+                return nil, xerrors.New("invalid client version below 2")
+        }
+
+        // Upgrade the instructions with the byzcoin protocol version
+        // to use the correct hash function.
+        req.Transaction.Instructions.SetVersion(header.Version)
+
+        _, maxsz, err := s.LoadBlockInfo(req.SkipchainID)
+        if err != nil {
+                return nil, xerrors.Errorf("loading block info: %v", err)
+        }
+        txsz := txSize(TxResult{ClientTransaction: req.Transaction})
+        if txsz > maxsz {
+                return nil, xerrors.New("transaction too large")
+        }
+
+        var credID string
+        var ok bool = false
+        for i, instr := range req.Transaction.Instructions {
+                log.Lvlf2("Instruction[%d]: %s on instance ID %s", i, instr.Action(), instr.InstanceID.String())
+                if instr.Action() == "spawn:credential" {
+                        // check user credentials before signing when spawning a credential
+                        h := sha256.New()
+                        h.Write([]byte("credential"))
+                        h.Write(instr.Arguments().Search("credentialID"))
+                        credID = hex.EncodeToString(h.Sum(nil))
+                        log.Lvlf2("credID: %s", credID)
+
+                        ok, err = s.checkCertificate(req.SOD, req.DG1, req.DG11, credID, true)
+                        if err != nil {
+                                return nil, xerrors.Errorf("Error checking certificate: %w", err)
+                        }
+                        if !ok {
+                                return nil, xerrors.Errorf("Certificate not valid or banned.")
+                        }
+                } else if instr.Action() == "invoke:darc.evolve" {
+                        // only allow evolving darcs after checking user credentials
+                        ok, err = s.checkCertificate(req.SOD, req.DG1, req.DG11, "", false)
+                        if err != nil {
+                                return nil, xerrors.Errorf("Error checking certificate: %w", err)
+                        }
+                        if !ok {
+                                return nil, xerrors.Errorf("Certificate not valid or banned.")
+                        }
+                }
+        }
+
+        var privateTomlFile = ""
+        for i, flag := range os.Args[1:] {
+                if flag == "-c" || flag == "--config" {
+                        if len(os.Args) > i+2 {
+                                privateTomlFile = os.Args[i+2]
+                        }
+                }
+        }
+        if privateTomlFile == "" {
+                return nil, xerrors.Errorf("Impossible to sign transaction request.")           
+        }
+
+        hc := &CothorityConfig{}
+        _, err = toml.DecodeFile(privateTomlFile, hc)
+        if err != nil {
+                return nil, xerrors.Errorf("Extracting registration key while toml decoding: %v", err)
+        }
+        if hc.PrivateRegistration == "" {
+                return nil, xerrors.Errorf("Can't sign transaction request.")
+        }
+
+        priv, err := encoding.StringHexToScalar(cothority.Suite, hc.PrivateRegistration)
+        if err != nil {
+                return nil, xerrors.Errorf("Can't sign transaction request: %v", err)
+        }
+        pub := suites.MustFind("Ed25519").Point().Mul(priv, nil)
+        signer := darc.NewSignerEd25519(pub, priv)
+
+        // Sign transaction
+        log.Lvlf1("Signing transaction with digest %v by ... %v", hex.EncodeToString(req.Transaction.Instructions.Hash()), pub)
+        digest := req.Transaction.Instructions.Hash()
+        for i, _ := range req.Transaction.Instructions {
+                if len(req.Transaction.Instructions[i].Signatures) == 0 {
+                        if err = req.Transaction.Instructions[i].SignWith(digest, signer) ; err != nil {
+                                return nil, xerrors.Errorf("signing: %w", err)
+                        }
+                }
+        }
+        log.Lvlf1("Digest after signing: %v", hex.EncodeToString(req.Transaction.Instructions.Hash()))
+
+        return &AddSigningResponse{Version: CurrentVersion, Transaction: req.Transaction.Clone()}, nil
+}
+
+func (s *Service) checkCertificate(sod []byte, dg1 []byte, dg11 []byte, credID string, checkDB bool) (bool, error) {
+        //  1. Check attached certificate
+        sodSize := len(sod)
+        dg1Size := len(dg1)
+        dg11Size := len(dg11)
+
+        // null-terminate
+        dg1 = append(dg1, '\x00')
+        dg1Size++
+        dg11 = append(dg11, '\x00')
+        dg11Size++
+
+        var idSize int = 20
+        idptr := C.calloc(C.ulong(idSize), C.sizeof_uchar)
+        expirationPtr := C.calloc(C.ulong(7), C.sizeof_uchar)
+        namePtr := C.calloc(C.ulong(40), C.sizeof_uchar)
+        defer C.free(unsafe.Pointer(idptr))
+        defer C.free(unsafe.Pointer(expirationPtr))
+        defer C.free(unsafe.Pointer(namePtr))
+
+        ret := C.check_ICAO((*C.uchar)(unsafe.Pointer(&sod[0])), C.int(sodSize), (*C.uchar)(unsafe.Pointer(&dg11[0])), C.int(dg11Size), (*C.uchar)(unsafe.Pointer(&dg1[0])), C.int(dg1Size), (*C.uchar)(idptr), C.int(idSize), (*C.uchar)(expirationPtr), (*C.uchar)(namePtr));
+
+        ID := string(C.GoBytes(idptr, C.int(idSize)))
+        log.Lvlf2("ID searched: %v", ID)
+        expiration := C.GoBytes(expirationPtr, C.int(7))
+        bName := C.GoBytes(namePtr, C.int(40))
+        surname := strings.Replace(strings.Split(string(bName), "<<")[0], "<", " ", -1)
+        name := strings.Replace(strings.Split(string(bName), "<<")[1], "<", " ", -1)
+
+        if (ret != 0) {
+                return false, xerrors.Errorf("Error checking certificate")
+        }
+
+        //  2. Check ID on database
+        if (checkDB) {
+                var dbID sql.NullString
+                var dbInsertTime sql.NullTime
+                err := s.stmtSearchID.QueryRow(ID).Scan(&dbID, &dbInsertTime)
+                if err != nil {
+                        if err != sql.ErrNoRows {
+                            return false, xerrors.Errorf("Error while checking identity in database: ", err)
+                        }
+                } else if dbID.Valid {
+                        // only allow a time window of 1 minute for recently inserted identities
+                        if dbInsertTime.Time.Before(time.Now().Add(-time.Minute)) {
+                                return false, xerrors.Errorf("Identity already in database")
+                        }
+                }
+        }
+
+        //  3. Not a sanctioned individual, not a PEP individual
+        var fullName, firstName, lastName, idNumber, country sql.NullString
+        err := s.stmtPassportRegistry.QueryRow(ID).Scan(&fullName, &firstName, &lastName, &idNumber)
+        if err != nil {
+                if err != sql.ErrNoRows {
+                    return false, xerrors.Errorf("Error while checking passport registry of sanctioned individuals.")
+                }
+        } else if fullName.Valid {
+                return false, xerrors.Errorf("SANCTION BANNED.")
+        }
+
+        err = s.stmtPersonRegistry.QueryRow("%" + ID + "%").Scan(&fullName, &firstName, &lastName, &idNumber)
+        if err != nil {
+                if err != sql.ErrNoRows {
+                    return false, xerrors.Errorf("Error while checking person registry of sanctioned individuals.")
+                }
+        } else if idNumber.Valid {
+                return false, xerrors.Errorf("SANCTION BANNED.")
+        }
+
+        // check both name+surname and surname+name
+        err = s.stmtPEP.QueryRow("%" +name + "%" + surname + "%", "%" +surname + "%" + name + "%").Scan(&fullName, &firstName, &lastName, &country)
+        if err != nil {
+                if err != sql.ErrNoRows {
+                    return false, xerrors.Errorf("Error on PEP registry.")
+                }
+        } else if fullName.Valid {
+                return false, xerrors.Errorf("PEP BANNED.")
+        }
+
+        //  4. Store public certificate (beware losing relationship between PK and ID)
+        if (checkDB) {
+                if len(credID) >= 64 {
+                        res, err := s.stmtInsertIdentity.Exec(ID, sod, dg1, dg11, expiration, credID)
+                        if err != nil {
+                            return false, xerrors.Errorf("Couldn't store identity in database: %v", err)
+                        }
+                        //rows, err := res.RowsAffected()
+                        _, err = res.RowsAffected()    
+                        if err != nil {  
+                            return false, xerrors.Errorf("Error checking number of stored identities in database")
+                        }
+                        // ONLY INSERT
+                        //if rows != 1 {
+                        //    return false, xerrors.Errorf("Incorrect number of stored identity rows")
+                        //}
+                }
+        }
+
+        return true, nil
 }
 
 // GetProof searches for a key and returns a proof of the
@@ -3239,6 +3514,41 @@ var existingDB = regexp.MustCompile(`^ByzCoin_[0-9a-f]+$`)
 // be stored in memory for tests and simulations, and on disk for real
 // deployments.
 func newService(c *onet.Context) (onet.Service, error) {
+        // Extract SanctionsDBconnection and IdentitiesDBconnection from private TOML configuration file
+        var privateTomlFile = ""
+        for i, flag := range os.Args[1:] {
+                if flag == "-c" || flag == "--config" {
+                        if len(os.Args) > i+2 {
+                                privateTomlFile = os.Args[i+2]
+                        }
+                }
+        }
+        if privateTomlFile == "" {
+                return nil, xerrors.Errorf("Not possible to obtain private TOML configuration file.")           
+        }
+
+        hc := &CothorityConfig{}
+        _, err := toml.DecodeFile(privateTomlFile, hc)
+        if err != nil {
+                return nil, xerrors.Errorf("Extracting registration key while toml decoding: %v", err)
+        }
+        if hc.SanctionsDBconnection == "" {
+                return nil, xerrors.Errorf("Couldn't obtain SanctionsDBconnection from private TOML configuration file.")
+        }
+        if hc.IdentitiesDBconnection == "" {
+                return nil, xerrors.Errorf("Couldn't obtain IdentitiesDBconnectio from private TOML configuration file.")
+        }
+
+        // Database loading
+        dbSanctions, err := sql.Open("sqlite3", hc.SanctionsDBconnection)
+        if err != nil {
+                return nil, xerrors.Errorf("Error opening sanctions database: %v", err)
+        }
+        dbIdentities, err := sql.Open("mysql", hc.IdentitiesDBconnection)
+        if err != nil {
+                return nil, xerrors.Errorf("Error opening identites database: %v", err)
+        }
+
 	s := &Service{
 		ServiceProcessor:   onet.NewServiceProcessor(c),
 		contracts:          globalContractRegistry.clone(),
@@ -3255,12 +3565,15 @@ func newService(c *onet.Context) (onet.Service, error) {
 		// We need a large enough buffer for all errors in 2 blocks
 		// where each block might be 1 MB in size and each tx is 1 KB.
 		txErrorBuf: newRingBuf(2048),
+                dbSanctions:    dbSanctions,
+                dbIdentities:   dbIdentities,
 	}
 
-	err := s.RegisterHandlers(
+	err = s.RegisterHandlers(
 		s.GetAllByzCoinIDs,
 		s.CreateGenesisBlock,
 		s.AddTransaction,
+		s.SignTransaction,
 		s.GetProof,
 		s.GetUpdates,
 		s.CheckAuthorization,
@@ -3339,6 +3652,42 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if _, err := s.startAllChains(); err != nil {
 		return nil, xerrors.Errorf("starting chains: %v", err)
 	}
+
+        //s.stmtInsertIdentity, err = dbIdentities.Prepare(`INSERT INTO Identities(ID, SOD, DG1, DG11) VALUES (?, ?, ?, ?);`)
+        s.stmtInsertIdentity, err = dbIdentities.Prepare(`REPLACE INTO Identities(ID, SOD, DG1, DG11, EXPIRATION_DATE_CERT, PK_ONCHAIN) VALUES (?, ?, ?, ?, ?, ?);`)
+        if err != nil {
+                return nil, xerrors.Errorf("Error preparing insertion statement on identities database.")
+        }
+
+        s.stmtSearchID, err = dbIdentities.Prepare(`SELECT ID, INSERT_TIME FROM Identities WHERE (ID=?);`)
+        if err != nil {
+                return nil, xerrors.Errorf("Error preparing selection statement on identities database.")
+        }
+
+        // passportNumber on rows of type Passport
+        s.stmtPassportRegistry, err = dbSanctions.Prepare(`select distinct json_extract(entity, '$.properties.name[0]') as fullName, json_extract(entity, '$.properties.firstName[0]') as firstName, json_extract(entity, '$.properties.lastName[0]') as lastName, json_extract(entity, '$.properties.idNumber[0]') as idNumber from passportRegistriesTable
+where id = 
+(select json_extract(value, '$.holder[0]') from passportRegistriesTable, json_each(passportRegistriesTable.entity)
+where key= "properties" and json_extract(value, '$.passportNumber') = json_array(?));`)
+        if err != nil {
+                return nil, xerrors.Errorf("Error preparing passport selection statement on sanctions database: %v", err)
+        }
+
+        // passportNumber on Person registries
+        s.stmtPersonRegistry, err = dbSanctions.Prepare(`select distinct json_extract(entity, '$.properties.name[0]') as fullName, json_extract(entity, '$.properties.firstName[0]') as firstName, json_extract(entity, '$.properties.lastName[0]') as lastName, json_extract(entity, '$.properties.idNumber[0]') as idNumber
+from noPassportRegistries, json_each(noPassportRegistries.entity)
+where key= "properties" and (json_extract(value, '$.passportNumber') like ?);`)
+        if err != nil {
+                return nil, xerrors.Errorf("Error preparing person selection statement on sanctions database.")
+        }
+
+        // PEP database
+        s.stmtPEP, err = dbSanctions.Prepare(`select distinct json_extract(entity, '$.properties.name[0]') as fullName, json_extract(entity, '$.properties.firstName[0]') as firstName, json_extract(entity, '$.properties.lastName[0]') as lastName, json_extract(entity, '$.properties.country[0]') as country
+from pepTables, json_each(pepTables.entity)
+where key="properties" and (json_extract(value, '$.name') like ? OR json_extract(value, '$.name') like ?);`)
+        if err != nil {
+                return nil, xerrors.Errorf("Error preparing PEP selection statement on sanctions database.")
+        }
 
 	return s, nil
 }

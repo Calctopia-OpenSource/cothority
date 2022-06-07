@@ -67,6 +67,12 @@ var cmds = cli.Commands{
 				Value: 1,
 			}},
 	},
+        {
+                Name:      "toggleActive",
+                Usage:     "changes active state of the coin",
+                Aliases: []string{"active"},
+                Action:    toggleActive,
+        },
 }
 
 type config struct {
@@ -295,6 +301,72 @@ func transfer(c *cli.Context) error {
 	log.Info("Transaction succeeded")
 
 	return lib.WaitPropagation(c, cl)
+}
+
+func toggleActive(c *cli.Context) error {
+        cfg, cl, err := loadConfig()
+        if err != nil {
+                return err
+        }
+
+        iid, err := coinHashPub(cfg.KeyPair.Public)
+        if err != nil {
+                return err
+        }
+        resp, err := cl.GetProofFromLatest(iid.Slice())
+        if err != nil {
+                return err
+        }
+        var active bool
+        if resp.Proof.InclusionProof.Match(iid.Slice()) {
+                _, value, _, _, err := resp.Proof.KeyValue()
+                if err != nil {
+                        return err
+                }
+                var coin byzcoin.Coin
+                err = protobuf.Decode(value, &coin)
+                if err != nil {
+                        return err
+                }
+                active = coin.Active
+                cfg.BCConfig.Roster = *resp.Proof.Latest.Roster
+                if err := cfg.save(); err != nil {
+                        return fmt.Errorf("couldn't save new roster: %v", err)
+                }
+                cl.Roster = cfg.BCConfig.Roster
+        }
+
+        signer := darc.NewSignerEd25519(cfg.KeyPair.Public, cfg.KeyPair.Private)
+        counters, err := cl.GetSignerCounters(signer.Identity().String())
+        if err != nil {
+                return fmt.Errorf("couldn't get signer counter: %v", err)
+        }
+
+        counters.Counters[0]++
+        ctx, err := cl.CreateTransaction(byzcoin.Instruction{
+                InstanceID: iid,
+                Invoke: &byzcoin.Invoke{
+                        ContractID: contracts.ContractCoinID,
+                        Command:    "toggleActive",
+                },
+                SignerCounter: counters.Counters,
+        })
+        if err != nil {
+                return err
+        }
+        err = ctx.FillSignersAndSignWith(signer)
+        if err != nil {
+                return err
+        }
+
+        log.Info("Toggling state of coin to: ", !active)
+        wait := 10
+        _, err = cl.AddTransactionAndWait(ctx, wait)
+        if err != nil {
+                return err
+        }
+
+        return lib.WaitPropagation(c, cl)
 }
 
 func coinHashPub(pub kyber.Point) (iid byzcoin.InstanceID, err error) {

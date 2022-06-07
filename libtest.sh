@@ -374,7 +374,7 @@ buildConode(){
   echo ")" ) > conode_/import.go
 
   cp "$root/conode/conode.go" conode_/conode.go
-  go build -o conode ./conode_
+  go build --tags "json1" -o conode ./conode_
   setupConode
 }
 
