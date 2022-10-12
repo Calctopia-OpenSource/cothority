@@ -1064,4 +1064,10 @@ var cmds = cli.Commands{
 			},
 		},
 	},
+
+	{
+		Name:      "zk-setup",
+		Usage:     "setup protocol for zero-knowledge monetary policy",
+		Action:    zkSetup,
+	},
 }
