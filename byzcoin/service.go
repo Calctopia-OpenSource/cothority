@@ -17,6 +17,8 @@ import (
         "os"
         "database/sql"
         "unsafe"
+	"encoding/gob"
+
 
 	"github.com/satori/go.uuid"
 	"go.dedis.ch/cothority/v3"
@@ -39,6 +41,10 @@ import (
 	"github.com/BurntSushi/toml"
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend/plonk"
+	"github.com/consensys/gnark/backend/witness"
 )
 
 // #cgo linux windows pkg-config: libssl libcrypto
@@ -1408,7 +1414,7 @@ func (s *Service) createNewBlock(scID skipchain.SkipBlockID, r *onet.Roster, tx 
 				if inst.GetType() == InvokeType {
 					if inst.Invoke.Args.Search("rewardTx") != nil {
 						if coinsBuf := inst.Invoke.Args.Search("coins"); coinsBuf != nil {
-							if binary.LittleEndian.Uint64(coinsBuf) == 20 {
+							if binary.LittleEndian.Uint64(coinsBuf) != 0 {
 								containBlockReward = true
 							}
 						}
@@ -2327,6 +2333,51 @@ func (s *Service) startTxPipeline(scID skipchain.SkipBlockID) chan struct{} {
 	return stopChan
 }
 
+func ZKVerifyMonetaryPolicy(abproof []byte, bufwitness []byte) bool {
+	// open vk
+	vkPtr, err := os.OpenFile("vk.bin", os.O_RDONLY, 0666)
+	if err != nil {
+		log.Lvlf3("Error opening verification key: %s", err)
+		return false
+	}
+	defer vkPtr.Close()
+
+	vk := plonk.NewVerifyingKey(ecc.BN254)
+	decGV := gob.NewDecoder(vkPtr)
+	err = decGV.Decode(vk)
+	if err != nil {
+		log.Lvlf3("Verification Key deserialization error (GOB): %s", err)
+		return false
+	}
+
+	// Decode proof
+	proof := plonk.NewProof(ecc.BN254)
+	bufProof := bytes.NewBuffer(abproof)
+	decGP := gob.NewDecoder(bufProof)
+	err = decGP.Decode(proof)
+	if err != nil {
+		log.Lvlf3("Proof deserialization error (GOB): %s", err)
+		return false
+	}
+
+	// Decode witness
+	witnessPublic, err := witness.New(ecc.BN254, nil)
+	witnessPublic.UnmarshalBinary(bufwitness)
+	if err != nil {
+		log.Lvlf3("Witness deserialization error (GOB): %s", err)
+		return false
+	}
+
+	// Verification
+	err = plonk.Verify(proof, vk, witnessPublic)
+	if err != nil {
+		log.Lvlf3("Error ZK verification: %s", err)
+		return false
+	}
+
+	return true
+}
+
 // We use the ByzCoin as a receiver (as is done in the identity service),
 // so we can access e.g. the StateTrie of the service.
 func (s *Service) verifySkipBlock(newID []byte, newSB *skipchain.SkipBlock) bool {
@@ -2432,6 +2483,26 @@ func (s *Service) verifySkipBlock(newID []byte, newSB *skipchain.SkipBlock) bool
 		if txOut[i].Accepted != body.TxResults[i].Accepted {
 			log.Lvl2(s.ServerIdentity(), "Client Transaction accept mismatch on tx", i)
 			return false
+		}
+
+		for _, instr := range body.TxResults[i].ClientTransaction.Instructions {
+			switch instr.GetType() {
+				case InvokeType:
+					if (instr.Invoke.ContractID == "coin" &&
+						instr.Invoke.Command == "mint" &&
+						instr.Invoke.Args.Search("rewardTx") != nil && 
+						instr.Invoke.Args.Search("zkproof") != nil &&
+						instr.Invoke.Args.Search("witness") != nil ) {
+
+						zkproof := instr.Invoke.Args.Search("zkproof")
+						witness := instr.Invoke.Args.Search("witness")
+
+						if !ZKVerifyMonetaryPolicy(zkproof, witness) {
+							log.Lvl2("Error verifying ZK monetary policy")
+							return false
+						}
+					}
+			}
 		}
 	}
 

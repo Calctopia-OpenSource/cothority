@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"encoding/gob"
+
 	"golang.org/x/xerrors"
 
 	"github.com/c4dt/qrgo"
@@ -37,6 +39,12 @@ import (
 	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
 	"go.dedis.ch/protobuf"
+
+	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend/plonk"
+	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/frontend/cs/scs"
+	"github.com/consensys/gnark/test"
 )
 
 type chainFetcher func(si *network.ServerIdentity) ([]skipchain.SkipBlockID, error)
@@ -1861,6 +1869,69 @@ func getInstance(c *cli.Context) error {
 	fmt.Fprintf(out, "-- Value: %s\n", instanceData)
 	fmt.Fprintf(out, "-- ContranctID: %s\n", contractID)
 	fmt.Fprintf(out, "-- DarcID: %x\n", darcID)
+	log.Info(out.String())
+
+	return nil
+}
+
+// setups zero-knowledge monetary policy
+func zkSetup(c *cli.Context) error {
+	var circuit byzcoin.MonetaryCircuit
+
+	// building the circuit...
+	ccs, err := frontend.Compile(ecc.BN254, scs.NewBuilder, &circuit)
+	if err != nil {
+		return xerrors.New("circuit compilation error")
+	}
+
+	srs, err := test.NewKZGSRS(ccs)
+	if err != nil {
+		return xerrors.New("error generating parameters")
+	}
+
+	// public data consists the polynomials describing the constants involved
+	// in the constraints, the polynomial describing the permutation ("grand
+	// product argument"), and the FFT domains.
+	pk, vk, err := plonk.Setup(ccs, srs)
+	if err != nil {
+		return xerrors.New("Error setting up PLONK")
+	}
+
+	// save pk, vk, and ccs
+	ccsPtr, err := os.OpenFile("ccs.bin", os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return xerrors.New("Error opening ccs.bin for writing")
+	}
+	defer ccsPtr.Close()
+	pkPtr, err := os.OpenFile("pk.bin", os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return xerrors.New("Error opening pk.bin for writing")
+	}
+	defer pkPtr.Close()
+	vkPtr, err := os.OpenFile("vk.bin", os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return xerrors.New("Error opening vk.bin for writing")
+	}
+	defer vkPtr.Close()
+
+	_, err = ccs.WriteTo(ccsPtr)
+	if err != nil {
+		return xerrors.New("Error enconding ccs.bin")
+	}
+
+	encP := gob.NewEncoder(pkPtr)
+	err = encP.Encode(pk)
+	if err != nil {
+		return xerrors.New("Error enconding pk.bin")
+	}
+	encV := gob.NewEncoder(vkPtr)
+	err = encV.Encode(vk)
+	if err != nil {
+		return xerrors.New("Error enconding vk.bin")
+	}
+
+	out := new(strings.Builder)
+	out.WriteString("saved ccs.bin, pk.bin and vk.bin\n")
 	log.Info(out.String())
 
 	return nil
