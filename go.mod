@@ -8,12 +8,10 @@ require (
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/bford/golang-x-crypto v0.0.0-20160518072526-27db609c9d03
-	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/c4dt/qrgo v0.0.0-20210312092726-8242850e1027
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/containerd/containerd v1.4.4 // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible
-	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/daviddengcn/go-colortext v1.0.0 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
@@ -21,7 +19,6 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/drand/drand v1.1.1
-	github.com/edsrzf/mmap-go v1.0.0 // indirect
 	github.com/ethereum/go-ethereum v1.8.27
 	github.com/go-asn1-ber/asn1-ber v1.4.1 // indirect
 	github.com/go-ldap/ldap/v3 v3.1.7
@@ -45,7 +42,6 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/stretchr/testify v1.5.1
-	github.com/syndtr/goleveldb v1.0.0 // indirect
 	github.com/urfave/cli v1.22.3
 	go.dedis.ch/kyber/v3 v3.0.13
 	go.dedis.ch/onet/v3 v3.2.10
@@ -53,10 +49,10 @@ require (
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
+	golang.org/x/sys v0.1.0
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
+	gopkg.in/satori/go.uuid.v1 v1.2.0
 	gopkg.in/square/go-jose.v2 v2.4.1 // indirect
-	gopkg.in/yaml.v2 v2.2.8 // indirect
 	gotest.tools/v3 v3.0.3 // indirect
 )
